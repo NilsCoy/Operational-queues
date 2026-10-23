@@ -51,7 +51,7 @@ function showError(el, message) {
   el.hidden = !message;
 }
 
-// setup-form is shown only when there is no admin yet; login only when there is one.
+// setup-form is shown only while no admin exists; login-auth only once it does.
 function applyAuthMode() {
   const mode = hasAdmin ? "login" : "setup";
   setupSection.hidden = mode !== "setup";
@@ -92,7 +92,8 @@ function closePinsModal() {
   pinsModal.hidden = true;
 }
 
-// Logged out: the whole interface is hidden and the auth modal cannot be closed.
+// Logged out: the whole inner content is hidden and the auth modal cannot be closed.
+// Only an authorized admin sees the main admin content and its buttons.
 function renderSessionUi() {
   const role = getRole();
   const loggedIn = Boolean(role);
@@ -100,6 +101,8 @@ function renderSessionUi() {
   appSection.hidden = !isAdmin;
   pinsOpen.hidden = !isAdmin;
   logoutBtn.hidden = !loggedIn;
+  document.body.classList.toggle("is-admin", isAdmin);
+  document.body.classList.toggle("is-guest", !loggedIn);
   if (!isAdmin) closePinsModal();
   if (!loggedIn) {
     openAuthModal();

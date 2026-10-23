@@ -32,8 +32,8 @@ function showError(el, message) {
   el.hidden = !message;
 }
 
-// Logged out: whole interface hidden, login modal shown and not closable.
-// Admin link is visible only for the admin role.
+// Logged out: the whole inner content is hidden and the login modal is shown.
+// The admin panel link is visible only for the admin role, never for a plain user.
 function refreshSessionUi() {
   const role = getRole();
   const loggedIn = Boolean(role);
@@ -41,6 +41,7 @@ function refreshSessionUi() {
   logoutBtn.hidden = !loggedIn;
   adminLink.hidden = role !== "admin";
   loginModal.hidden = loggedIn;
+  document.body.classList.toggle("is-guest", !loggedIn);
   if (!loggedIn) requestAnimationFrame(() => loginPassword.focus());
 }
 

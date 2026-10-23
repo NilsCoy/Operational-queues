@@ -17,6 +17,7 @@
   </header>
 
   <main class="page">
+    <!-- Admin content: hidden until an authorized admin is logged in. -->
     <section id="app" hidden>
       <div class="panel">
         <h2>Добавить запись</h2>
@@ -51,6 +52,7 @@
 
   <div class="modal" id="login-modal" hidden>
     <div class="modal-card" id="modal-card">
+      <!-- First run only: no admin exists yet. -->
       <section id="setup" class="auth-panel" hidden>
         <h2>Первый запуск</h2>
         <p class="modal-hint">Создайте пароль администратора. Стандартных паролей нет.</p>
@@ -62,6 +64,7 @@
         <p class="form-error" id="setup-error" hidden></p>
       </section>
 
+      <!-- Shown only when an admin already exists. -->
       <section id="login-auth" class="auth-panel" hidden>
         <h2>Вход администратора</h2>
         <p class="modal-hint">Введите пароль администратора.</p>
