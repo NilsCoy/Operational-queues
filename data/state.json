@@ -1,21 +1,12 @@
 {
-  "tickets": [
-    {
-      "number": 1,
-      "status": "served",
-      "counter": 1,
-      "order": 1,
-      "touched_at": 2
-    }
-  ],
+  "tickets": [],
   "next_number": 2,
   "next_order": 2,
   "next_sequence": 3,
   "settings": {
     "numbering_pin": "1111",
     "counter_pins": [
-      "2222",
-      "3333"
+      "2222"
     ],
     "admin_pin": "9999",
     "sound_mode": "off"
