@@ -22,9 +22,11 @@
       <div class="panel">
         <h2>Добавить запись</h2>
         <form id="record-form" class="form-grid">
-          <label>Дата<input type="date" id="record-day" required></label>
-          <label>Большие операции<input type="text" id="record-big" placeholder="Например: 3"></label>
-          <label>Малые операции<input type="text" id="record-small" placeholder="Например: 7"></label>
+          <div class='form-grid-input'>
+            <label>Дата<input type="date" id="record-day" required></label>
+            <label>Большие операции<textarea id="record-big" placeholder="Например: 3"></textarea></label>
+            <label>Малые операции<textarea id="record-small" placeholder="Например: 7"></textarea></label>
+          </div>
           <button type="submit" class="btn">Добавить</button>
         </form>
         <p class="form-error" id="record-error" hidden></p>

@@ -199,6 +199,16 @@ a.btn-ghost:hover {
   width: 100%;
 }
 
+.week-picker input {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
 .week-picker button {
   padding: 8px 14px;
   font-size: 0.82rem;
@@ -295,13 +305,19 @@ a.btn-ghost:hover {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   align-items: end;
   width: 100%;
 }
+.form-grid-input {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: start;
+  width: 100%;
+}
 
-.form-grid label {
+.form-grid-input label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -310,8 +326,10 @@ a.btn-ghost:hover {
   color: var(--muted);
 }
 
-.form-grid input,
-.form-grid select {
+.form-grid-input input,
+.form-grid-input textarea,
+.form-grid-input select {
+  resize: vertical;
   font-family: var(--font-body);
   font-size: 0.95rem;
   padding: 10px 12px;
@@ -320,10 +338,13 @@ a.btn-ghost:hover {
   background: var(--bg);
   color: var(--ink);
   width: 100%;
+  min-height: 44px;
+  height: 44px;
 }
 
-.form-grid input:focus-visible,
-.form-grid select:focus-visible {
+.form-grid-input input:focus-visible,
+.form-grid-input textarea:focus-visible,
+.form-grid-input select:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
@@ -431,7 +452,8 @@ a.btn-ghost:hover {
   color: var(--muted);
 }
 
-.form-column input {
+.form-column input,
+.form-column textarea {
   font-family: var(--font-body);
   font-size: 1rem;
   padding: 12px;
@@ -441,7 +463,8 @@ a.btn-ghost:hover {
   color: var(--ink);
 }
 
-.form-column input:focus-visible {
+.form-column input:focus-visible,
+.form-column textarea {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
