@@ -1,14 +1,23 @@
 {
-  "tickets": [],
-  "next_number": 2,
-  "next_order": 2,
-  "next_sequence": 3,
-  "settings": {
-    "numbering_pin": "1111",
-    "counter_pins": [
-      "2222"
-    ],
-    "admin_pin": "9999",
-    "sound_mode": "off"
-  }
+  "records": [
+    {
+      "id": 1,
+      "day": "2026-10-19",
+      "big_operations": "test",
+      "small_operations": "test"
+    }
+  ],
+  "next_record_id": 2,
+  "pins": [
+    {
+      "pin_hash": "pbkdf2_sha256$120000$71f96fd9381805dd504376a2ac64b0af$16d8ff857025efb3388a9d812cb08223de8e420e9a1e8d8b64d028f88023e91b",
+      "role": "admin",
+      "label": "Admin"
+    },
+    {
+      "pin_hash": "pbkdf2_sha256$120000$7fceea4f9bc0f2d054ef7bc285283d04$fbcd01e53bd07584292dc9823b204d31069a53899b0dd6b76f3b2d6808bb35b9",
+      "role": "user",
+      "label": "Test"
+    }
+  ]
 }

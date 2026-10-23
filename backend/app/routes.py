@@ -1,56 +1,46 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
-from .auth import bearer_token, check_counter_pin, check_pin, require_counter, require_page
-from .models import SoundMode, TicketStatus, public_view
-from .queue_logic import (
-    call_next,
-    delete_ticket,
-    has_active_ticket,
-    issue_number,
-    issue_numbers,
-    mark_done,
-    recall_previous,
-    reorder_ticket,
-    requeue_ticket,
-    skip_ticket,
+from .auth import bearer_token, find_role, hash_pin, require_role
+from .models import PinCode, Role, pin_public_view
+from .records import (
+    add_record,
+    delete_record,
+    group_by_week,
+    list_records,
+    update_record,
 )
 from .store import save_state
 
 router = APIRouter(prefix="/api")
 
-_VALID_PAGES = ("number", "counter", "admin")
+ADMIN = require_role(Role.ADMIN)
 
 
 class LoginRequest(BaseModel):
-    page: str
-    pin: str
-    counter: int | None = None
+    password: str
 
 
 class LoginResponse(BaseModel):
     token: str
-    counter: int | None = None
+    role: Role
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request) -> LoginResponse:
-    if payload.page not in _VALID_PAGES:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown page")
-    settings = request.app.state.queue_state.settings
-    if payload.page == "counter":
-        if payload.counter is None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="counter required")
-        if not check_counter_pin(payload.counter, payload.pin, settings):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid pin")
-    elif not check_pin(payload.page, payload.pin, settings):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid pin")
-    token = request.app.state.sessions.create(payload.page, payload.counter)
-    return LoginResponse(token=token, counter=payload.counter)
+    state = request.app.state.queue_state
+    role = find_role(payload.password, state)
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials"
+        )
+    token = request.app.state.sessions.create(role)
+    return LoginResponse(token=token, role=role)
 
 
 @router.post("/logout")
@@ -61,190 +51,150 @@ async def logout(request: Request) -> dict:
     return {"loggedOut": True}
 
 
-async def _persist_and_broadcast(request: Request) -> None:
-    await asyncio.to_thread(save_state, request.app.state.data_path, request.app.state.queue_state)
-    await request.app.state.manager.broadcast(public_view(request.app.state.queue_state))
+@router.get("/me")
+async def me(request: Request) -> dict:
+    token = bearer_token(request)
+    role = request.app.state.sessions.role_for(token) if token else None
+    if role is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or missing session"
+        )
+    return {"role": role.value}
 
 
-@router.get("/state")
-async def get_state(request: Request) -> dict:
-    return public_view(request.app.state.queue_state)
+async def _persist(request: Request) -> None:
+    await asyncio.to_thread(
+        save_state, request.app.state.data_path, request.app.state.queue_state
+    )
 
 
-@router.post("/number/issue", dependencies=[Depends(require_page("number"))])
-async def issue(request: Request) -> dict:
+class RecordCreate(BaseModel):
+    day: date
+    big_operations: str = ""
+    small_operations: str = ""
+
+
+class RecordUpdate(BaseModel):
+    day: date | None = None
+    big_operations: str | None = None
+    small_operations: str | None = None
+
+
+@router.get("/schedule")
+async def schedule(request: Request, week_of: date | None = Query(default=None)) -> dict:
+    """Public schedule (used by /user). `week_of` limits the result to that week."""
+    state = request.app.state.queue_state
+    records = list_records(state, week_of)
+    return {
+        "weeks": group_by_week(records),
+        "records": [r.model_dump(mode="json") for r in records],
+    }
+
+
+@router.get("/admin/records", dependencies=[Depends(ADMIN)])
+async def read_records(request: Request, week_of: date | None = Query(default=None)) -> dict:
+    state = request.app.state.queue_state
+    records = list_records(state, week_of)
+    return {
+        "weeks": group_by_week(records),
+        "records": [r.model_dump(mode="json") for r in records],
+    }
+
+
+@router.post("/admin/records", dependencies=[Depends(ADMIN)])
+async def create_record(payload: RecordCreate, request: Request) -> dict:
     async with request.app.state.lock:
-        ticket = issue_number(request.app.state.queue_state)
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
+        record = add_record(
+            request.app.state.queue_state,
+            payload.day,
+            payload.big_operations,
+            payload.small_operations,
+        )
+        await _persist(request)
+    return record.model_dump(mode="json")
 
 
-class TicketNumberRequest(BaseModel):
-    number: int
-
-
-class ReorderRequest(BaseModel):
-    number: int
-    direction: str
-
-
-class CounterPinsRequest(BaseModel):
-    counter_pins: list[str]
-
-
-@router.post("/admin/skip", dependencies=[Depends(require_page("admin"))])
-async def skip_route(payload: TicketNumberRequest, request: Request) -> dict:
+@router.put("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
+async def edit_record(record_id: int, payload: RecordUpdate, request: Request) -> dict:
     async with request.app.state.lock:
-        ticket = skip_ticket(request.app.state.queue_state, payload.number)
-        if ticket is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="cannot skip ticket")
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
-
-
-@router.post("/admin/requeue", dependencies=[Depends(require_page("admin"))])
-async def requeue_route(payload: TicketNumberRequest, request: Request) -> dict:
-    async with request.app.state.lock:
-        ticket = requeue_ticket(request.app.state.queue_state, payload.number)
-        if ticket is None:
+        record = update_record(
+            request.app.state.queue_state,
+            record_id,
+            payload.day,
+            payload.big_operations,
+            payload.small_operations,
+        )
+        if record is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="cannot requeue ticket"
+                status_code=status.HTTP_404_NOT_FOUND, detail="record not found"
             )
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
+        await _persist(request)
+    return record.model_dump(mode="json")
 
 
-@router.post("/admin/delete", dependencies=[Depends(require_page("admin"))])
-async def delete_route(payload: TicketNumberRequest, request: Request) -> dict:
+@router.delete("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
+async def remove_record(record_id: int, request: Request) -> dict:
     async with request.app.state.lock:
-        deleted = delete_ticket(request.app.state.queue_state, payload.number)
+        deleted = delete_record(request.app.state.queue_state, record_id)
         if not deleted:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ticket not found")
-        await _persist_and_broadcast(request)
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="record not found"
+            )
+        await _persist(request)
     return {"deleted": True}
 
 
-@router.post("/admin/reorder", dependencies=[Depends(require_page("admin"))])
-async def reorder_route(payload: ReorderRequest, request: Request) -> dict:
-    async with request.app.state.lock:
-        moved = reorder_ticket(request.app.state.queue_state, payload.number, payload.direction)
-        if not moved:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="cannot reorder ticket"
-            )
-        await _persist_and_broadcast(request)
-    return {"reordered": True}
+class PinCreate(BaseModel):
+    password: str = Field(min_length=4, max_length=128)
+    role: Role = Role.USER
+    label: str = ""
 
 
-class BulkIssueRequest(BaseModel):
-    count: int = Field(ge=1, le=200)
+@router.get("/admin/pins", dependencies=[Depends(ADMIN)])
+async def list_pins(request: Request) -> dict:
+    return {"pins": pin_public_view(request.app.state.queue_state)}
 
 
-@router.post("/admin/issue-bulk", dependencies=[Depends(require_page("admin"))])
-async def issue_bulk_route(payload: BulkIssueRequest, request: Request) -> dict:
-    async with request.app.state.lock:
-        tickets = issue_numbers(request.app.state.queue_state, payload.count)
-        await _persist_and_broadcast(request)
-    return {"tickets": [t.model_dump(mode="json") for t in tickets]}
-
-
-@router.post("/admin/counters", dependencies=[Depends(require_page("admin"))])
-async def update_counters(payload: CounterPinsRequest, request: Request) -> dict:
-    pins = [p.strip() for p in payload.counter_pins]
-    if not pins:
+@router.post("/admin/pins", dependencies=[Depends(ADMIN)])
+async def create_pin(payload: PinCreate, request: Request) -> dict:
+    state = request.app.state.queue_state
+    password = payload.password
+    if len(password.strip()) < 4:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="need at least one counter",
+            detail="password must be at least 4 characters",
+        )
+    if find_role(password, state) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="password already in use"
         )
     async with request.app.state.lock:
-        state = request.app.state.queue_state
-        existing_pins = state.settings.counter_pins
-        # blank entry = keep the current PIN for that counter
-        resolved_pins = [
-            pin or (existing_pins[i] if i < len(existing_pins) else "")
-            for i, pin in enumerate(pins)
-        ]
-        if any(not p for p in resolved_pins):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="new counters need a PIN",
+        state.pins.append(
+            PinCode(
+                pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip()
             )
-        new_count = len(resolved_pins)
-        touches_removed_counter = any(
-            t.status in (TicketStatus.CALLED, TicketStatus.SKIPPED)
-            and t.counter is not None
-            and t.counter > new_count
-            for t in state.tickets
         )
-        if touches_removed_counter:
+        await _persist(request)
+    return {"pins": pin_public_view(state)}
+
+
+@router.delete("/admin/pins/{pin_index}", dependencies=[Depends(ADMIN)])
+async def delete_pin(pin_index: int, request: Request) -> dict:
+    """Delete a PIN by its position in the list (values/hashes are never exposed)."""
+    state = request.app.state.queue_state
+    async with request.app.state.lock:
+        if pin_index < 0 or pin_index >= len(state.pins):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="pin not found"
+            )
+        removed = state.pins.pop(pin_index)
+        if removed.role == Role.ADMIN and not any(
+            p.role == Role.ADMIN for p in state.pins
+        ):
+            state.pins.insert(pin_index, removed)
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="finish, requeue, or delete tickets on the counters being removed first",
+                detail="cannot delete the last admin password",
             )
-        # clear stale counter links so a reused number can't recall_previous a served ticket
-        for t in state.tickets:
-            if t.status == TicketStatus.SERVED and t.counter is not None and t.counter > new_count:
-                t.counter = None
-        state.settings.counter_pins = resolved_pins
-        sessions = request.app.state.sessions
-        for i, old_pin in enumerate(existing_pins, start=1):
-            if i > new_count or resolved_pins[i - 1] != old_pin:
-                sessions.invalidate_counter(i)
-        await _persist_and_broadcast(request)
-    return {"counter_count": new_count}
-
-
-class SoundModeRequest(BaseModel):
-    sound_mode: SoundMode
-
-
-@router.post("/admin/sound-mode", dependencies=[Depends(require_page("admin"))])
-async def update_sound_mode(payload: SoundModeRequest, request: Request) -> dict:
-    async with request.app.state.lock:
-        state = request.app.state.queue_state
-        state.settings.sound_mode = payload.sound_mode
-        await _persist_and_broadcast(request)
-    return {"sound_mode": payload.sound_mode.value}
-
-
-@router.get("/counter/whoami")
-async def whoami_route(counter: int = Depends(require_counter)) -> dict:
-    return {"counter": counter}
-
-
-@router.post("/counter/call-next")
-async def call_next_route(request: Request, counter: int = Depends(require_counter)) -> dict:
-    async with request.app.state.lock:
-        state = request.app.state.queue_state
-        if has_active_ticket(state, counter):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="this counter already has an active ticket",
-            )
-        ticket = call_next(state, counter)
-        if ticket is None:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="no one waiting")
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
-
-
-@router.post("/counter/done")
-async def done_route(request: Request, counter: int = Depends(require_counter)) -> dict:
-    async with request.app.state.lock:
-        ticket = mark_done(request.app.state.queue_state, counter)
-        if ticket is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="no active ticket for this counter"
-            )
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
-
-
-@router.post("/counter/recall-previous")
-async def recall_previous_route(request: Request, counter: int = Depends(require_counter)) -> dict:
-    async with request.app.state.lock:
-        ticket = recall_previous(request.app.state.queue_state, counter)
-        if ticket is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="nothing to recall")
-        await _persist_and_broadcast(request)
-    return ticket.model_dump(mode="json")
+        await _persist(request)
+    return {"pins": pin_public_view(state)}

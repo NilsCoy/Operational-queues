@@ -1,212 +1,341 @@
-requireAuth("admin", initAdminPage);
+// Admin page: create/read records grouped by week, and manage access passwords.
+import { api, getRole, setSession, clearSession } from "../shared/api.js";
+import { formatWeekRange, startOfWeek, addWeeks, toIsoDate, parseIsoDate } from "../shared/dates.js";
+import { renderWeeks, escapeHtml } from "../shared/schedule.js";
 
-let currentCounterCount = 0;
+const setupSection = document.getElementById("setup");
+const setupForm = document.getElementById("setup-form");
+const setupPassword = document.getElementById("setup-password");
+const setupPassword2 = document.getElementById("setup-password-2");
+const setupError = document.getElementById("setup-error");
 
-async function initAdminPage() {
-  const app = document.getElementById("app");
-  app.innerHTML = `
-    <div class="page admin-page">
-      <span class="eyebrow">Control Panel</span>
-      <h1>Admin</h1>
-      <button id="logout-btn" class="link-btn">Log out</button>
-      <section id="ticket-table"></section>
-      <p id="ticket-action-message"></p>
-      <section class="settings-panel">
-        <h2>Issue Numbers</h2>
-        <label for="bulk-issue-count">How many numbers to issue at once</label>
-        <input id="bulk-issue-count" type="number" min="1" max="200" value="1" />
-        <button id="issue-bulk" class="btn-primary">Issue Numbers</button>
-        <p id="issue-bulk-message"></p>
-      </section>
-      <section class="settings-panel">
-        <h2>Counters</h2>
-        <label for="counter-count-input">Number of counters</label>
-        <input id="counter-count-input" type="number" min="1" value="2" />
-        <div id="counter-pin-inputs"></div>
-        <button id="save-counters" class="btn-primary">Save Counters</button>
-        <p id="settings-message"></p>
-      </section>
-      <section class="settings-panel">
-        <h2>Sound</h2>
-        <label>What plays on the TV screen when a number is called</label>
-        <div class="radio-group">
-          <label><input type="radio" name="sound-mode" value="off" /> Off</label>
-          <label><input type="radio" name="sound-mode" value="beep" /> Beep</label>
-          <label><input type="radio" name="sound-mode" value="announce" /> Voice announce</label>
-        </div>
-        <button id="save-sound" class="btn-primary">Save Sound</button>
-        <p id="sound-message"></p>
-      </section>
-    </div>
-  `;
+const loginAuthSection = document.getElementById("login-auth");
+const loginForm = document.getElementById("login-form");
+const loginPassword = document.getElementById("login-password");
+const loginError = document.getElementById("login-error");
 
-  document.getElementById("logout-btn").addEventListener("click", async () => {
-    await logout("admin");
-    location.reload();
-  });
+const loginModal = document.getElementById("login-modal");
+const appSection = document.getElementById("app");
+const logoutBtn = document.getElementById("logout");
 
-  const state = await (await apiGet("/api/state")).json();
-  currentCounterCount = state.counter_count;
-  const countInput = document.getElementById("counter-count-input");
-  countInput.value = currentCounterCount;
-  renderPinInputs(currentCounterCount);
+const weekLabel = document.getElementById("week-label");
+const prevWeek = document.getElementById("prev-week");
+const nextWeek = document.getElementById("next-week");
+const jumpDay = document.getElementById("jump-day");
+const jumpGo = document.getElementById("jump-go");
+const jumpToday = document.getElementById("jump-today");
+const scheduleEl = document.getElementById("schedule");
 
-  countInput.addEventListener("input", () => {
-    const count = Math.max(1, Number(countInput.value) || 1);
-    renderPinInputs(count);
-  });
+const recordForm = document.getElementById("record-form");
+const recordDay = document.getElementById("record-day");
+const recordBig = document.getElementById("record-big");
+const recordSmall = document.getElementById("record-small");
+const recordError = document.getElementById("record-error");
 
-  document.getElementById("issue-bulk").addEventListener("click", issueBulk);
+const pinsModal = document.getElementById("pins-modal");
+const pinsOpen = document.getElementById("pins-open");
+const pinsClose = document.getElementById("pins-close");
+const pinForm = document.getElementById("pin-form");
+const pinValue = document.getElementById("pin-value");
+const pinLabel = document.getElementById("pin-label");
+const pinRole = document.getElementById("pin-role");
+const pinList = document.getElementById("pin-list");
+const pinCreated = document.getElementById("pin-created");
+const pinError = document.getElementById("pin-error");
 
-  document.getElementById("save-counters").addEventListener("click", saveCounters);
+let currentWeek = startOfWeek(new Date());
+let hasAdmin = false;
 
-  document.querySelectorAll('input[name="sound-mode"]').forEach((input) => {
-    input.checked = input.value === state.sound_mode;
-  });
-  document.getElementById("save-sound").addEventListener("click", saveSoundMode);
-
-  renderTickets(state);
-  connectWs(renderTickets);
+function showError(el, message) {
+  el.textContent = message || "";
+  el.hidden = !message;
 }
 
-const MAX_BULK_ISSUE = 200;
+// setup-form is shown only when there is no admin yet; login only when there is one.
+function applyAuthMode() {
+  const mode = hasAdmin ? "login" : "setup";
+  setupSection.hidden = mode !== "setup";
+  loginAuthSection.hidden = mode !== "login";
+  if (setupForm) setupForm.hidden = hasAdmin;
+  return mode;
+}
 
-async function issueBulk() {
-  const input = document.getElementById("bulk-issue-count");
-  const message = document.getElementById("issue-bulk-message");
-  const count = Number(input.value);
-  if (!Number.isInteger(count) || count < 1 || count > MAX_BULK_ISSUE) {
-    message.textContent = `Enter a number between 1 and ${MAX_BULK_ISSUE}`;
+function openAuthModal() {
+  const mode = applyAuthMode();
+  loginModal.hidden = false;
+  if (mode === "setup") {
+    setupPassword.value = "";
+    setupPassword2.value = "";
+    showError(setupError, "");
+  } else {
+    loginPassword.value = "";
+    showError(loginError, "");
+  }
+  const focusInput = mode === "setup" ? setupPassword : loginPassword;
+  requestAnimationFrame(() => focusInput.focus());
+}
+
+function closeAuthModal() {
+  loginModal.hidden = true;
+}
+
+function openPinsModal() {
+  if (getRole() !== "admin") return;
+  showError(pinError, "");
+  pinCreated.hidden = true;
+  pinsModal.hidden = false;
+  loadPins();
+  requestAnimationFrame(() => pinValue.focus());
+}
+
+function closePinsModal() {
+  pinsModal.hidden = true;
+}
+
+// Logged out: the whole interface is hidden and the auth modal cannot be closed.
+function renderSessionUi() {
+  const role = getRole();
+  const loggedIn = Boolean(role);
+  const isAdmin = role === "admin";
+  appSection.hidden = !isAdmin;
+  pinsOpen.hidden = !isAdmin;
+  logoutBtn.hidden = !loggedIn;
+  if (!isAdmin) closePinsModal();
+  if (!loggedIn) {
+    openAuthModal();
+  } else {
+    closeAuthModal();
+  }
+}
+
+function refreshWeekUi() {
+  weekLabel.textContent = formatWeekRange(toIsoDate(currentWeek));
+  if (jumpDay) jumpDay.value = toIsoDate(currentWeek);
+}
+
+async function loadWeek() {
+  refreshWeekUi();
+  try {
+    const data = await api.adminRecords(toIsoDate(currentWeek));
+    renderWeeks(scheduleEl, data, toIsoDate(currentWeek));
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    scheduleEl.innerHTML = `<p class="schedule-empty">Не удалось загрузить расписание: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+function goToDay(iso) {
+  if (!iso) return;
+  currentWeek = startOfWeek(parseIsoDate(iso));
+  loadWeek();
+}
+
+async function loadPins() {
+  pinList.innerHTML = '<tr><td colspan="4" class="pin-empty">Загрузка…</td></tr>';
+  try {
+    const data = await api.pins();
+    renderPins(data.pins);
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    pinList.innerHTML = `<tr><td colspan="4" class="pin-empty">Ошибка: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderPins(pins) {
+  if (!pins || !pins.length) {
+    pinList.innerHTML = '<tr><td colspan="4" class="pin-empty">Паролей нет</td></tr>';
     return;
   }
-  const res = await apiPost("/api/admin/issue-bulk", "admin", { count });
-  if (!res.ok) {
-    message.textContent = "Failed to issue numbers";
-    return;
-  }
-  const { tickets } = await res.json();
-  message.textContent = `Issued #${tickets[0].number} to #${tickets[tickets.length - 1].number}`;
-}
-
-async function saveResultMessage(res) {
-  if (res.ok) return "Saved";
-  const body = await res.json().catch(() => null);
-  return body?.detail || "Failed to save";
-}
-
-async function saveSoundMode() {
-  const selected = document.querySelector('input[name="sound-mode"]:checked');
-  const message = document.getElementById("sound-message");
-  if (!selected) {
-    message.textContent = "Pick a sound option";
-    return;
-  }
-  const res = await apiPost("/api/admin/sound-mode", "admin", { sound_mode: selected.value });
-  message.textContent = await saveResultMessage(res);
-}
-
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (ch) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[ch]);
-}
-
-function renderPinInputs(count) {
-  const container = document.getElementById("counter-pin-inputs");
-  const existing = Array.from(container.querySelectorAll("input")).map((el) => el.value);
-  container.innerHTML = Array.from({ length: count }, (_, i) => {
-    const placeholder =
-      i < currentCounterCount ? "Leave blank to keep current PIN" : `New counter ${i + 1} PIN`;
-    return `<input data-pin-index="${i}" placeholder="${placeholder}" value="${escapeHtml(existing[i] || "")}" />`;
-  }).join("");
-}
-
-async function saveCounters() {
-  const pins = Array.from(document.querySelectorAll("[data-pin-index]")).map((el) =>
-    el.value.trim()
-  );
-  const message = document.getElementById("settings-message");
-  const missingNewPin = pins.some((p, i) => !p && i >= currentCounterCount);
-  if (!pins.length || missingNewPin) {
-    message.textContent = "New counters need a PIN";
-    return;
-  }
-  const res = await apiPost("/api/admin/counters", "admin", { counter_pins: pins });
-  message.textContent = await saveResultMessage(res);
-  if (res.ok) {
-    currentCounterCount = pins.length;
-    document.querySelectorAll("[data-pin-index]").forEach((el) => (el.value = ""));
-    renderPinInputs(currentCounterCount);
-  }
-}
-
-function renderTickets(state) {
-  const container = document.getElementById("ticket-table");
-  const groups = { waiting: [], called: [], served: [], skipped: [] };
-  for (const ticket of state.tickets) {
-    groups[ticket.status].push(ticket);
-  }
-  groups.waiting.sort((a, b) => a.order - b.order);
-
-  container.innerHTML = Object.entries(groups)
+  pinList.innerHTML = pins
     .map(
-      ([status, tickets]) => `
-      <div class="ticket-group">
-        <h2><span class="status-pill status-pill--${status}">${status}</span> · ${tickets.length}</h2>
-        <ul>${tickets.map((t) => ticketRow(t, status)).join("")}</ul>
-      </div>
-    `
+      (p, index) => `<tr>
+        <td><span class="pin-role-badge pin-role-${escapeHtml(p.role)}">${p.role === "admin" ? "Администратор" : "Пользователь"}</span></td>
+        <td>${escapeHtml(p.label || "—")}</td>
+        <td class="pin-hash">${escapeHtml(p.hash_prefix)}…</td>
+        <td><button type="button" class="btn btn-ghost pin-delete" data-delete-index="${index}">Удалить</button></td>
+      </tr>`,
     )
     .join("");
+}
 
-  container.querySelectorAll("[data-action]").forEach((el) => {
-    el.addEventListener("click", () =>
-      handleAction(el.dataset.action, Number(el.dataset.number), el.dataset.direction)
-    );
+function enterApp() {
+  closeAuthModal();
+  renderSessionUi();
+  recordDay.value = toIsoDate(currentWeek);
+  loadWeek();
+}
+
+function onUnauthorized() {
+  clearSession();
+  renderSessionUi();
+}
+
+async function boot() {
+  if (getRole() === "admin") {
+    enterApp();
+    return;
+  }
+  try {
+    const { has_admin } = await api.bootstrapStatus();
+    hasAdmin = Boolean(has_admin);
+  } catch {
+    hasAdmin = true;
+  }
+  renderSessionUi();
+}
+
+setupForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showError(setupError, "");
+  const password = setupPassword.value;
+  if (password.length < 4) {
+    showError(setupError, "Пароль: минимум 4 символа");
+    return;
+  }
+  if (password !== setupPassword2.value) {
+    showError(setupError, "Пароли не совпадают");
+    return;
+  }
+  try {
+    await api.bootstrapAdmin(password);
+    hasAdmin = true;
+    applyAuthMode();
+    loginPassword.value = "";
+    showError(loginError, "Администратор создан — войдите");
+    requestAnimationFrame(() => loginPassword.focus());
+  } catch (err) {
+    if (err.status === 409) {
+      hasAdmin = true;
+      applyAuthMode();
+      showError(loginError, "Администратор уже создан — войдите");
+      requestAnimationFrame(() => loginPassword.focus());
+      return;
+    }
+    showError(setupError, err.message);
+  }
+});
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showError(loginError, "");
+  const password = loginPassword.value;
+  if (!password) {
+    showError(loginError, "Введите пароль");
+    return;
+  }
+  try {
+    const { token, role } = await api.login(password);
+    if (role !== "admin") {
+      clearSession();
+      showError(loginError, "Этот пароль не администраторский");
+      return;
+    }
+    setSession(token, role);
+    loginPassword.value = "";
+    enterApp();
+  } catch (err) {
+    showError(loginError, err.status === 401 ? "Неверный пароль" : err.message);
+  }
+});
+
+pinsOpen.addEventListener("click", openPinsModal);
+pinsClose.addEventListener("click", closePinsModal);
+pinsModal.addEventListener("click", (event) => {
+  if (event.target === pinsModal) closePinsModal();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !pinsModal.hidden) closePinsModal();
+});
+
+prevWeek.addEventListener("click", () => {
+  currentWeek = addWeeks(currentWeek, -1);
+  loadWeek();
+});
+nextWeek.addEventListener("click", () => {
+  currentWeek = addWeeks(currentWeek, 1);
+  loadWeek();
+});
+if (jumpGo) jumpGo.addEventListener("click", () => goToDay(jumpDay.value));
+if (jumpDay) {
+  jumpDay.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      goToDay(jumpDay.value);
+    }
   });
 }
+if (jumpToday) jumpToday.addEventListener("click", () => goToDay(toIsoDate(new Date())));
 
-function ticketRow(ticket, status) {
-  const actions = [];
-  if (status === "waiting") {
-    actions.push(
-      `<button data-action="reorder" data-number="${ticket.number}" data-direction="up">↑</button>`
-    );
-    actions.push(
-      `<button data-action="reorder" data-number="${ticket.number}" data-direction="down">↓</button>`
-    );
-    actions.push(`<button data-action="skip" data-number="${ticket.number}">Skip</button>`);
+recordForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showError(recordError, "");
+  if (!recordDay.value) {
+    showError(recordError, "Укажите дату");
+    return;
   }
-  if (status === "called") {
-    actions.push(`<button data-action="skip" data-number="${ticket.number}">Skip</button>`);
-    actions.push(`<button data-action="requeue" data-number="${ticket.number}">Requeue</button>`);
+  try {
+    await api.createRecord({
+      day: recordDay.value,
+      big_operations: recordBig.value.trim(),
+      small_operations: recordSmall.value.trim(),
+    });
+    recordBig.value = "";
+    recordSmall.value = "";
+    goToDay(recordDay.value);
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    showError(recordError, err.message);
   }
-  if (status === "served" || status === "skipped") {
-    actions.push(`<button data-action="requeue" data-number="${ticket.number}">Requeue</button>`);
-  }
-  actions.push(`<button data-action="delete" data-number="${ticket.number}">Delete</button>`);
-  return `<li><span class="ticket-number">#${ticket.number}</span> ${actions.join(" ")}</li>`;
-}
+});
 
-const ACTION_PATHS = {
-  skip: "/api/admin/skip",
-  requeue: "/api/admin/requeue",
-  delete: "/api/admin/delete",
-  reorder: "/api/admin/reorder",
-};
-
-async function handleAction(action, number, direction) {
-  const body = action === "reorder" ? { number, direction } : { number };
-  const res = await apiPost(ACTION_PATHS[action], "admin", body);
-  const message = document.getElementById("ticket-action-message");
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => null);
-    message.textContent = errorBody?.detail || `Failed to ${action} ticket #${number}`;
-  } else {
-    message.textContent = "";
+pinForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  showError(pinError, "");
+  pinCreated.hidden = true;
+  const password = pinValue.value;
+  if (password.length < 4) {
+    showError(pinError, "Пароль: минимум 4 символа");
+    return;
   }
-}
+  try {
+    await api.createPin({
+      password,
+      role: pinRole.value,
+      label: pinLabel.value.trim(),
+    });
+    pinCreated.textContent = `Пароль создан: ${password} — передайте его владельцу, он больше не покажется.`;
+    pinCreated.hidden = false;
+    pinValue.value = "";
+    pinLabel.value = "";
+    await loadPins();
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    showError(pinError, err.message);
+  }
+});
+
+pinList.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-delete-index]");
+  if (!button) return;
+  showError(pinError, "");
+  if (!window.confirm("Удалить этот пароль?")) return;
+  try {
+    await api.deletePin(Number(button.dataset.deleteIndex));
+    await loadPins();
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    showError(pinError, err.message);
+  }
+});
+
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await api.logout();
+  } catch {
+    // token may already be invalid
+  }
+  clearSession();
+  renderSessionUi();
+});
+
+boot();

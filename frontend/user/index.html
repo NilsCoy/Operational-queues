@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Расписание</title>
+  <link rel="stylesheet" href="/frontend/shared/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Расписание</h1>
+    <div class="topbar-actions">
+      <a href="/admin" class="btn btn-ghost" id="admin-link" hidden>Админ панель</a>
+      <button type="button" id="logout" class="btn btn-ghost" hidden>Выйти</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section id="app" hidden>
+      <div class="week-nav">
+        <button type="button" class="btn btn-ghost" id="prev-week">← Предыдущая</button>
+        <strong id="week-label"></strong>
+        <button type="button" class="btn btn-ghost" id="next-week">Следующая →</button>
+      </div>
+      <div class="week-picker">
+        <label>Перейти к дате
+          <input type="date" id="jump-day">
+        </label>
+        <button type="button" class="btn" id="jump-go">Перейти</button>
+        <button type="button" class="btn btn-ghost" id="jump-today">Сегодня</button>
+      </div>
+      <div id="schedule" class="schedule"></div>
+    </section>
+  </main>
+
+  <div class="modal" id="login-modal" hidden>
+    <div class="modal-card">
+      <h2>Вход</h2>
+      <p class="modal-hint">Введите пароль, выданный администратором.</p>
+      <form id="login-form" class="form-column">
+        <label>Пароль
+          <input type="password" id="login-password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn">Войти</button>
+      </form>
+      <p class="form-error" id="login-error" hidden></p>
+    </div>
+  </div>
+
+  <script type="module" src="/frontend/user/user.js"></script>
+</body>
+</html>

@@ -1,51 +1,49 @@
 from __future__ import annotations
 
+from datetime import date
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class TicketStatus(StrEnum):
-    WAITING = "waiting"
-    CALLED = "called"
-    SERVED = "served"
-    SKIPPED = "skipped"
+class Role(StrEnum):
+    ADMIN = "admin"
+    USER = "user"
 
 
-class SoundMode(StrEnum):
-    OFF = "off"
-    BEEP = "beep"
-    ANNOUNCE = "announce"
+class OperationRecord(BaseModel):
+    """One row of the weekly schedule: a date plus big and small operations."""
+
+    id: int
+    day: date
+    big_operations: str = ""
+    small_operations: str = ""
 
 
-class Ticket(BaseModel):
-    number: int
-    status: TicketStatus = TicketStatus.WAITING
-    counter: int | None = None
-    order: int
-    touched_at: int = 0
+class PinCode(BaseModel):
+    """A PIN the admin issues, bound to a role (admin or user).
 
+    Only the hash is stored; the plain PIN is shown once at creation time.
+    """
 
-class Settings(BaseModel):
-    numbering_pin: str = "1111"
-    counter_pins: list[str] = Field(default_factory=lambda: ["2222", "3333"])
-    admin_pin: str = "9999"
-    sound_mode: SoundMode = SoundMode.OFF
+    pin_hash: str
+    role: Role = Role.USER
+    label: str = ""
 
 
 class AppState(BaseModel):
-    tickets: list[Ticket] = Field(default_factory=list)
-    next_number: int = 1
-    next_order: int = 1
-    next_sequence: int = 1
-    settings: Settings = Field(default_factory=Settings)
+    records: list[OperationRecord] = Field(default_factory=list)
+    next_record_id: int = 1
+    pins: list[PinCode] = Field(default_factory=list)
 
 
-def public_view(state: AppState) -> dict:
-    """State as sent to clients: tickets + numbering only, never PINs."""
-    return {
-        "tickets": [t.model_dump(mode="json") for t in state.tickets],
-        "next_number": state.next_number,
-        "counter_count": len(state.settings.counter_pins),
-        "sound_mode": state.settings.sound_mode.value,
-    }
+def pin_public_view(state: AppState) -> list[dict]:
+    """PIN list for the admin UI. Hashes are never exposed."""
+    return [
+        {"role": p.role.value, "label": p.label, "hash_prefix": p.pin_hash[:12]}
+        for p in state.pins
+    ]
+
+
+def has_role(state: AppState, role: Role) -> bool:
+    return any(p.role == role for p in state.pins)

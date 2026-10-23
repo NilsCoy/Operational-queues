@@ -1,22 +1,106 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Manrope:wght@400;600;700;800&display=swap"
-    rel="stylesheet"
-  />
-  <link rel="stylesheet" href="/frontend/shared/style.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Админ панель — расписание</title>
+  <link rel="stylesheet" href="/frontend/shared/style.css">
 </head>
-<body class="page-admin">
-  <div id="app"></div>
-  <script src="/frontend/shared/api.js"></script>
-  <script src="/frontend/shared/ws.js"></script>
-  <script src="/frontend/shared/pin-pad.js"></script>
-  <script src="/frontend/admin/admin.js"></script>
+<body>
+  <header class="topbar">
+    <h1>Админ панель</h1>
+    <div class="topbar-actions">
+      <a href="/user" class="btn btn-ghost">Расписание</a>
+      <button type="button" id="pins-open" class="btn btn-ghost" hidden>Пароли доступа</button>
+      <button type="button" id="logout" class="btn btn-ghost" hidden>Выйти</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section id="app" hidden>
+      <div class="panel">
+        <h2>Добавить запись</h2>
+        <form id="record-form" class="form-grid">
+          <label>Дата<input type="date" id="record-day" required></label>
+          <label>Большие операции<input type="text" id="record-big" placeholder="Например: 3"></label>
+          <label>Малые операции<input type="text" id="record-small" placeholder="Например: 7"></label>
+          <button type="submit" class="btn">Добавить</button>
+        </form>
+        <p class="form-error" id="record-error" hidden></p>
+      </div>
+
+      <div class="panel">
+        <h2>Недели</h2>
+        <div class="week-nav">
+          <button type="button" class="btn btn-ghost" id="prev-week">← Предыдущая</button>
+          <strong id="week-label"></strong>
+          <button type="button" class="btn btn-ghost" id="next-week">Следующая →</button>
+        </div>
+        <div class="week-picker">
+          <label>Перейти к дате
+            <input type="date" id="jump-day">
+          </label>
+          <button type="button" class="btn" id="jump-go">Перейти</button>
+          <button type="button" class="btn btn-ghost" id="jump-today">Сегодня</button>
+        </div>
+        <h2 id="table-title">Расписание</h2>
+        <div id="schedule"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="login-modal" hidden>
+    <div class="modal-card" id="modal-card">
+      <section id="setup" class="auth-panel" hidden>
+        <h2>Первый запуск</h2>
+        <p class="modal-hint">Создайте пароль администратора. Стандартных паролей нет.</p>
+        <form id="setup-form" class="form-column" hidden>
+          <label>Пароль<input type="password" id="setup-password" minlength="4" autocomplete="new-password" required></label>
+          <label>Повторите пароль<input type="password" id="setup-password-2" minlength="4" autocomplete="new-password" required></label>
+          <button type="submit" class="btn">Создать администратора</button>
+        </form>
+        <p class="form-error" id="setup-error" hidden></p>
+      </section>
+
+      <section id="login-auth" class="auth-panel" hidden>
+        <h2>Вход администратора</h2>
+        <p class="modal-hint">Введите пароль администратора.</p>
+        <form id="login-form" class="form-column">
+          <label>Пароль<input type="password" id="login-password" autocomplete="current-password" required></label>
+          <button type="submit" class="btn">Войти</button>
+        </form>
+        <p class="form-error" id="login-error" hidden></p>
+      </section>
+    </div>
+  </div>
+
+  <div class="modal" id="pins-modal" hidden>
+    <div class="modal-card">
+      <h2>Пароли доступа</h2>
+      <p class="modal-hint">Пароль показывается один раз при создании — сохраните его.</p>
+      <form id="pin-form" class="form-column">
+        <label>Пароль<input type="password" id="pin-value" minlength="4" autocomplete="new-password" required placeholder="Пароль"></label>
+        <label>Подпись<input type="text" id="pin-label" placeholder="Кому выдан"></label>
+        <label>Роль
+          <select id="pin-role">
+            <option value="user">Пользователь</option>
+            <option value="admin">Администратор</option>
+          </select>
+        </label>
+        <button type="submit" class="btn">Создать пароль</button>
+      </form>
+      <p class="pin-created" id="pin-created" hidden></p>
+      <table class="schedule-table pin-table">
+        <thead>
+          <tr><th>Роль</th><th>Подпись</th><th>Хеш</th><th></th></tr>
+        </thead>
+        <tbody id="pin-list"></tbody>
+      </table>
+      <p class="form-error" id="pin-error" hidden></p>
+      <button type="button" class="btn btn-ghost" id="pins-close">Закрыть</button>
+    </div>
+  </div>
+
+  <script type="module" src="/frontend/admin/admin.js"></script>
 </body>
 </html>

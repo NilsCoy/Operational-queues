@@ -1,13 +1,12 @@
 :root {
   --bg: #ffffff;
   --surface: #ffffff;
-  --border: #e8e4dd;
-  --ink: #1f1b16;
-  --muted: #8a8478;
-  --orange: #ff6a1a;
-  --orange-deep: #d94f00;
-  --orange-tint: #fff1e6;
-  --danger: #e5484d;
+  --surface-alt: #f7f7f7;
+  --border: #d9d9d9;
+  --border-strong: #b3b3b3;
+  --ink: #111111;
+  --muted: #7a7a7a;
+  --danger: #c02626;
 
   --font-display: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -23,524 +22,466 @@ body {
   font-family: var(--font-body);
 }
 
-#app {
-  min-height: 100vh;
+/* ---------- Layout ---------- */
+
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 32px clamp(16px, 3vw, 48px) 64px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  gap: 40px;
+}
+
+/* контейнер панелей в админке */
+#app {
   width: 100%;
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 32px 24px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
 }
 
-body.page-admin #app {
-  justify-content: flex-start;
-  padding-top: 56px;
-}
+/* ---------- Topbar ---------- */
 
-body.page-tv #app {
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
   max-width: none;
-  width: 100%;
-  padding: clamp(24px, 4vh, 64px) clamp(24px, 4vw, 80px);
+  margin: 0;
+  padding: 20px clamp(16px, 3vw, 48px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
 }
 
-.page { width: 100%; }
-
-h1 {
-  font-size: 1.6rem;
+.topbar h1 {
+  font-size: 1.25rem;
   font-weight: 800;
   letter-spacing: -0.01em;
-  margin: 0 0 24px;
+  margin: 0;
 }
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ссылки-кнопки в шапке */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+/* ---------- Typography ---------- */
 
 h2 {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   color: var(--muted);
-  margin: 0 0 12px;
+  margin: 0 0 14px;
 }
 
-/* --- Buttons --- */
+/* ---------- Buttons ---------- */
 
-button {
+button,
+a.btn {
   font-family: var(--font-body);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 700;
-  padding: 14px 24px;
+  padding: 12px 20px;
   border-radius: 10px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
-  transition: transform 80ms ease, border-color 120ms ease, color 120ms ease;
+  transition: transform 80ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-button:hover:not(:disabled) {
-  border-color: var(--orange);
-  color: var(--orange-deep);
+button:hover:not(:disabled),
+a.btn:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
 }
 
-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
+button:active:not(:disabled) { transform: scale(0.97); }
 
-button:focus-visible {
-  outline: 2px solid var(--orange);
+button:focus-visible,
+a.btn:focus-visible {
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
 button:disabled {
-  background: var(--bg);
+  background: var(--surface-alt);
   border-color: var(--border);
   color: var(--muted);
   cursor: not-allowed;
 }
 
-.btn-primary {
-  background: var(--orange);
-  border-color: var(--orange);
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 800;
-  padding: 18px 32px;
-  font-size: 1.05rem;
-  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--orange-deep);
-  border-color: var(--orange-deep);
-  color: #ffffff;
-}
-
-.btn-primary:disabled {
-  background: var(--border);
+.btn-ghost {
+  background: transparent;
   border-color: var(--border);
   color: var(--muted);
-  clip-path: none;
 }
 
-/* --- Eyebrow / status pills --- */
+.btn-ghost:hover:not(:disabled),
+a.btn-ghost:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
 
-.eyebrow {
-  display: inline-flex;
+/* ---------- Panel (blocks) ---------- */
+
+.panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: left;
+}
+
+.panel-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 14px;
+}
+
+/* ---------- Week nav ---------- */
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.week-nav strong {
+  font-size: 1rem;
+  font-weight: 800;
+  min-width: 200px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.week-picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 8px;
+  width: 100%;
+}
+
+.week-picker button {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.week-picker button.active,
+.week-picker button[aria-current="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+/* ---------- Schedule / table ---------- */
+
+#schedule,
+.schedule {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 24px;
+}
+
+.schedule-table {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  font-size: 0.92rem;
+}
+
+.schedule-table caption {
+  caption-side: top;
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.95rem;
+  padding: 12px 0;
+  color: var(--ink);
+}
+
+.schedule-table thead th {
+  background: var(--surface-alt);
   font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   color: var(--muted);
-  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-bottom: 1.5px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
 }
 
-.eyebrow::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--orange);
+.schedule-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
 }
+
+.schedule-table tbody tr:last-child td { border-bottom: none; }
+
+.schedule-table tbody tr:nth-child(even) {
+  background: var(--surface-alt);
+}
+
+.schedule-table tbody tr:hover {
+  background: #efefef;
+}
+
+.schedule-table tr.is-today,
+.schedule-table tr.is-active {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.schedule-empty {
+  width: 100%;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 40px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+}
+
+/* ---------- Forms (admin) ---------- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+  width: 100%;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.form-grid input,
+.form-grid select {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--ink);
+  width: 100%;
+}
+
+.form-grid input:focus-visible,
+.form-grid select:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.form-grid button {
+  justify-self: start;
+  align-self: end;
+}
+
+/* ---------- Status pills ---------- */
 
 .status-pill {
   display: inline-block;
-  font-family: var(--font-body);
   font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   padding: 3px 9px;
   border-radius: 999px;
-  border: 1.5px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   color: var(--muted);
+  background: var(--surface);
 }
 
-.status-pill--waiting { color: var(--orange-deep); border-color: var(--orange); background: var(--orange-tint); }
-.status-pill--called { color: #ffffff; background: var(--orange); border-color: var(--orange); }
-.status-pill--served { color: var(--muted); border-color: var(--border); }
+.status-pill--waiting { color: var(--ink); border-color: var(--ink); }
+.status-pill--called  { color: #ffffff; background: var(--ink); border-color: var(--ink); }
+.status-pill--served  { color: var(--muted); border-color: var(--border); }
 .status-pill--skipped { color: var(--danger); border-color: var(--danger); }
 
-/* --- LED-style ticket-number display (the signature element) --- */
+/* ---------- Ticket number (LED) ---------- */
 
 .led-number {
   font-family: var(--font-display);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
-  color: var(--orange);
-  animation: pop-in 260ms ease-out;
+  color: var(--ink);
 }
 
-.led-number--idle {
-  color: var(--border);
-}
+.led-number--idle { color: var(--border-strong); }
 
-@keyframes pop-in {
-  0% { opacity: 0; transform: scale(0.85); }
-  100% { opacity: 1; transform: scale(1); }
-}
+/* ---------- Login modal ---------- */
 
-@media (prefers-reduced-motion: reduce) {
-  .led-number { animation: none; }
-  button, .led-number { transition: none; }
-}
-
-/* --- PIN pad --- */
-
-.pin-pad {
-  width: 100%;
-  max-width: 320px;
-  text-align: center;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 16px;
-  padding: 32px 28px;
-  box-shadow: 0 8px 24px rgba(31, 27, 22, 0.06);
-}
-
-.pin-pad h1 {
-  font-size: 1.1rem;
-  margin-bottom: 4px;
-}
-
-.pin-pad input {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  letter-spacing: 0.3em;
-  text-align: center;
-  width: 100%;
-  padding: 12px;
-  margin: 20px 0;
-  border-radius: 10px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
-  color: var(--orange-deep);
-}
-
-.pin-pad input:focus-visible {
-  outline: 2px solid var(--orange);
-  outline-offset: 2px;
-}
-
-.pin-pad button {
-  width: 100%;
-}
-
-.error { color: var(--danger); font-size: 0.85rem; font-weight: 700; }
-.hidden { display: none; }
-
-/* --- Number / Counter pages --- */
-
-.number-page, .counter-page, .counter-select {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.number-page #last-issued {
-  margin: 28px 0 8px;
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.number-page #recent-list,
-.tv-page #recent-list {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  padding: 0;
-  margin: 0;
-}
-
-.number-page #recent-list li,
-.tv-page #recent-list li {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-display);
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.counter-select h1 { margin-bottom: 24px; }
-.counter-select div { display: flex; gap: 12px; }
-
-.counter-page #current-number {
-  font-size: clamp(4rem, 18vw, 7rem);
-  margin: 8px 0 32px;
-  line-height: 1;
-}
-
-.counter-page .button-row { display: flex; gap: 12px; }
-
-#counter-message {
-  margin-top: 16px;
-  color: var(--orange-deep);
-  font-weight: 700;
-  min-height: 1.4em;
-}
-
-.link-btn {
-  margin-top: 24px;
-  background: none;
-  border: none;
-  padding: 4px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--muted);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.link-btn:hover:not(:disabled) {
-  color: var(--orange-deep);
-  border: none;
-}
-
-/* --- TV page --- */
-
-.tv-page {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-}
-
-.tv-header {
-  width: 100%;
-  margin-bottom: clamp(24px, 3vh, 48px);
-}
-
-.tv-header h1 {
-  margin: 4px 0 0;
-  font-size: clamp(2.2rem, 4.5vw, 3.6rem);
-}
-
-.tv-page .counters {
-  display: flex;
-  gap: clamp(20px, 3vw, 40px);
-  justify-content: center;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.counter-tile {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 20px;
-  padding: clamp(28px, 4vw, 48px) clamp(36px, 6vw, 72px);
-  flex: 1;
-  min-width: 260px;
-  box-shadow: 0 8px 24px rgba(31, 27, 22, 0.05);
-}
-
-.counter-tile h2 {
-  margin-bottom: 12px;
-  font-size: clamp(0.9rem, 1.3vw, 1.1rem);
-}
-
-.counter-tile .led-number {
-  font-size: clamp(5rem, 14vw, 11rem);
-  line-height: 1;
-}
-
-#waiting-count {
-  margin: clamp(24px, 3vh, 40px) 0 12px;
-  font-size: clamp(1.2rem, 2vw, 1.8rem);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-#waiting-count .led-number {
-  font-size: clamp(1.6rem, 2.6vw, 2.4rem);
-  margin-left: 8px;
-}
-
-.tv-status {
-  color: var(--danger);
-  font-weight: 700;
-  font-size: 0.85rem;
-  margin: 0 0 12px;
-}
-
-.tv-unlock-hint {
+.modal {
   position: fixed;
-  left: 50%;
-  bottom: 20px;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: #ffffff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  opacity: 0.85;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 17, 17, 0.45);
+  z-index: 50;
 }
 
-.tv-page .recent {
+.modal[hidden] { display: none; }
+
+.modal-card {
   width: 100%;
-  max-width: 520px;
-  margin-top: clamp(12px, 2vh, 28px);
+  max-width: 500px;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 28px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.modal-card h2 {
+  color: var(--ink);
+  font-size: 1rem;
+  margin: 0;
+}
+
+.modal-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.auth-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.form-column {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   text-align: left;
 }
 
-.tv-page #recent-list {
-  justify-content: flex-start;
-}
-
-/* --- Admin page --- */
-
-.admin-page { text-align: left; }
-.admin-page h1 { margin-bottom: 8px; }
-
-.ticket-group {
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
-  padding: 18px 20px;
-  margin-bottom: 14px;
-}
-
-.ticket-group h2 {
+.form-column label {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-}
-
-.ticket-group ul { list-style: none; padding: 0; margin: 0; }
-
-.ticket-group li {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.95rem;
-}
-
-.ticket-group li:last-child { border-bottom: none; }
-
-.ticket-number {
-  font-family: var(--font-display);
-  font-weight: 700;
-  color: var(--orange-deep);
-  min-width: 3.5em;
-}
-
-.ticket-group li button {
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 800;
-  padding: 6px 10px;
-  border-radius: 6px;
-}
-
-.settings-panel {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-}
-
-.settings-panel input {
-  font-family: var(--font-body);
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
-  color: var(--ink);
-  margin-right: 8px;
-  margin-bottom: 12px;
-}
-
-.settings-panel input:focus-visible {
-  outline: 2px solid var(--orange);
-  outline-offset: 2px;
-}
-
-.settings-panel label {
-  display: block;
+  flex-direction: column;
+  gap: 6px;
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--muted);
-  margin-bottom: 8px;
 }
 
-#counter-count-input {
-  width: 90px;
-  display: block;
-  margin-bottom: 16px;
-}
-
-#counter-pin-inputs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-#counter-pin-inputs input {
-  width: 160px;
-  margin: 0;
-}
-
-#settings-message,
-#sound-message {
-  color: var(--orange-deep);
-  font-weight: 700;
-  font-size: 0.85rem;
-}
-
-.radio-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.radio-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.95rem;
-  font-weight: 600;
+.form-column input {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
   color: var(--ink);
-  cursor: pointer;
 }
 
-.radio-group input[type="radio"] {
-  width: auto;
+.form-column input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.form-column button { width: 100%; }
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.85rem;
+  font-weight: 700;
   margin: 0;
-  accent-color: var(--orange);
 }
 
-/* --- Responsive --- */
+/* ---------- Responsive ---------- */
 
-@media (max-width: 560px) {
-  body:not(.page-tv) #app { padding: 20px 16px 48px; }
-  .tv-page .counters { flex-direction: column; }
-  .counter-select div, .counter-page .button-row {
+@media (max-width: 720px) {
+  .topbar {
     flex-direction: column;
-    width: 100%;
+    align-items: center;
+    text-align: center;
   }
-  .counter-select button, .counter-page .button-row button { width: 100%; }
+
+  .week-nav { flex-direction: column; gap: 10px; }
+  .week-nav strong { min-width: 0; }
+
+  .schedule-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .schedule-table thead th,
+  .schedule-table tbody td {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .page { padding: 20px 14px 48px; }
+  .topbar { padding: 16px; }
+  .panel { padding: 18px; }
+  .topbar-actions { flex-wrap: wrap; justify-content: center; }
+  #app { gap: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button, a.btn { transition: none; }
 }
