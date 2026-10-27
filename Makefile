@@ -18,7 +18,6 @@ help:
 	@echo "venv    - create venv and install dependencies only"
 	@echo "run     - start the app (python -m uvicorn backend.app.main:app)"
 	@echo "reload  - start with auto-reload (development)"
-	@echo "test    - run pytest"
 	@echo "lint    - ruff check + format check"
 	@echo "format  - ruff format"
 	@echo "clean   - remove __pycache__ and .pytest_cache"
@@ -36,9 +35,6 @@ run:
 
 reload:
 	$(PY) -m uvicorn backend.app.main:app --host $(IP) --port $(PORT) --reload
-
-test:
-	$(PY) -m pytest backend/tests -v
 
 lint:
 	$(PY) -m ruff check backend

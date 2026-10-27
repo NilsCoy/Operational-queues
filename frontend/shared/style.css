@@ -436,18 +436,13 @@ a.btn-ghost:hover {
   color: var(--ink);
   width: 100%;
   min-height: 44px;
+  height: 44px;
 }
 
 /* multi-line record values need room; single-line inputs stay compact */
 .form-grid-input input:not([type="date"]),
 .form-grid-input select {
   height: 44px;
-}
-
-.form-grid-input textarea {
-  min-height: 88px;
-  height: auto;
-  line-height: 1.45;
 }
 
 .form-grid-input input:focus-visible,
