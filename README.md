@@ -45,11 +45,11 @@ Self-hosted web app for planning and viewing operational queues: an admin fills 
 
 Requires Python 3.11.
 
+In the Makefile, configure the ip and port
+
 ```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-make relaod
+make install
+make reload
 ```
 
 Then open `http://127.0.0.1:8000/user` or `http://127.0.0.1:8000/admin`.
