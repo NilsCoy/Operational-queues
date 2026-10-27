@@ -20,14 +20,18 @@
     <!-- Admin content: hidden until an authorized admin is logged in. -->
     <section id="app" hidden>
       <div class="panel">
-        <h2>Добавить запись</h2>
+        <h2 id="record-form-title">Добавить запись</h2>
         <form id="record-form" class="form-grid">
-          <div class='form-grid-input'>
+          <input type="hidden" id="record-id">
+          <div class="form-grid-input">
             <label>Дата<input type="date" id="record-day" required></label>
-            <label>Большие операции<textarea id="record-big" placeholder="Например: 3"></textarea></label>
-            <label>Малые операции<textarea id="record-small" placeholder="Например: 7"></textarea></label>
+            <label>Большие операции<textarea id="record-big" rows="4" placeholder="Например: 3"></textarea></label>
+            <label>Малые операции<textarea id="record-small" rows="4" placeholder="Например: 7"></textarea></label>
           </div>
-          <button type="submit" class="btn">Добавить</button>
+          <div class="form-actions">
+            <button type="submit" class="btn" id="record-submit">Добавить</button>
+            <button type="button" class="btn btn-ghost" id="record-cancel" hidden>Отмена</button>
+          </div>
         </form>
         <p class="form-error" id="record-error" hidden></p>
       </div>
@@ -87,7 +91,7 @@
         <label>Пароль<input type="password" id="pin-value" minlength="4" autocomplete="new-password" required placeholder="Пароль"></label>
         <label>Подпись<input type="text" id="pin-label" placeholder="Кому выдан"></label>
         <label>Роль
-          <select id="pin-role" clsss="pin-role">
+          <select id="pin-role" class="pin-role">
             <option value="user">Пользователь</option>
             <option value="admin">Администратор</option>
           </select>

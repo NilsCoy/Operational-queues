@@ -1,4 +1,4 @@
-// Admin page: create/read records grouped by week, and manage access passwords.
+// Admin page: create/read/update/delete records grouped by week, and manage access passwords.
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { formatWeekRange, startOfWeek, addWeeks, toIsoDate, parseIsoDate } from "../shared/dates.js";
 import { renderWeeks, escapeHtml } from "../shared/schedule.js";
@@ -27,9 +27,13 @@ const jumpToday = document.getElementById("jump-today");
 const scheduleEl = document.getElementById("schedule");
 
 const recordForm = document.getElementById("record-form");
+const recordFormTitle = document.getElementById("record-form-title");
+const recordId = document.getElementById("record-id");
 const recordDay = document.getElementById("record-day");
 const recordBig = document.getElementById("record-big");
 const recordSmall = document.getElementById("record-small");
+const recordSubmit = document.getElementById("record-submit");
+const recordCancel = document.getElementById("record-cancel");
 const recordError = document.getElementById("record-error");
 
 const pinsModal = document.getElementById("pins-modal");
@@ -45,6 +49,7 @@ const pinError = document.getElementById("pin-error");
 
 let currentWeek = startOfWeek(new Date());
 let hasAdmin = false;
+let weekRecords = [];
 
 function showError(el, message) {
   el.textContent = message || "";
@@ -120,7 +125,8 @@ async function loadWeek() {
   refreshWeekUi();
   try {
     const data = await api.adminRecords(toIsoDate(currentWeek));
-    renderWeeks(scheduleEl, data, toIsoDate(currentWeek));
+    weekRecords = Array.isArray(data) ? data : data.records || [];
+    renderWeeks(scheduleEl, weekRecords, toIsoDate(currentWeek), { editable: true });
   } catch (err) {
     if (err.status === 401) return onUnauthorized();
     scheduleEl.innerHTML = `<p class="schedule-empty">Не удалось загрузить расписание: ${escapeHtml(err.message)}</p>`;
@@ -155,10 +161,35 @@ function renderPins(pins) {
         <td><span class="pin-role-badge pin-role-${escapeHtml(p.role)}">${p.role === "admin" ? "Администратор" : "Пользователь"}</span></td>
         <td>${escapeHtml(p.label || "—")}</td>
         <td class="pin-hash">${escapeHtml(p.hash_prefix)}…</td>
-        <td><button type="button" class="btn btn-ghost pin-delete" data-delete-index="${index}">Удалить</button></td>
+        <td><button type="button" class="btn btn-sm btn-ghost pin-delete" data-delete-index="${index}">Удалить</button></td>
       </tr>`,
     )
     .join("");
+}
+
+// ---- record form: add / edit mode ----
+
+function resetRecordForm() {
+  recordId.value = "";
+  recordBig.value = "";
+  recordSmall.value = "";
+  recordFormTitle.textContent = "Добавить запись";
+  recordSubmit.textContent = "Добавить";
+  recordCancel.hidden = true;
+  showError(recordError, "");
+}
+
+function startEditRecord(record) {
+  recordId.value = record.id;
+  recordDay.value = record.day;
+  recordBig.value = record.big_operations || "";
+  recordSmall.value = record.small_operations || "";
+  recordFormTitle.textContent = "Изменить запись";
+  recordSubmit.textContent = "Сохранить";
+  recordCancel.hidden = false;
+  showError(recordError, "");
+  recordForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  requestAnimationFrame(() => recordBig.focus());
 }
 
 function enterApp() {
@@ -276,15 +307,46 @@ recordForm.addEventListener("submit", async (event) => {
     showError(recordError, "Укажите дату");
     return;
   }
+  const payload = {
+    day: recordDay.value,
+    big_operations: recordBig.value,
+    small_operations: recordSmall.value,
+  };
   try {
-    await api.createRecord({
-      day: recordDay.value,
-      big_operations: recordBig.value.trim(),
-      small_operations: recordSmall.value.trim(),
-    });
-    recordBig.value = "";
-    recordSmall.value = "";
-    goToDay(recordDay.value);
+    if (recordId.value) {
+      await api.updateRecord(recordId.value, payload);
+    } else {
+      // POST always appends: a second record for the same day is allowed.
+      await api.createRecord(payload);
+    }
+    resetRecordForm();
+    goToDay(payload.day);
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    showError(recordError, err.message);
+  }
+});
+
+recordCancel.addEventListener("click", () => {
+  resetRecordForm();
+  recordDay.value = toIsoDate(currentWeek);
+});
+
+scheduleEl.addEventListener("click", async (event) => {
+  const editBtn = event.target.closest("[data-edit-record]");
+  if (editBtn) {
+    const record = weekRecords.find((r) => String(r.id) === editBtn.dataset.editRecord);
+    if (record) startEditRecord(record);
+    return;
+  }
+
+  const deleteBtn = event.target.closest("[data-delete-record]");
+  if (!deleteBtn) return;
+  if (recordId.value === deleteBtn.dataset.deleteRecord) resetRecordForm();
+  if (!window.confirm("Удалить эту запись?")) return;
+  try {
+    await api.deleteRecord(deleteBtn.dataset.deleteRecord);
+    await loadWeek();
   } catch (err) {
     if (err.status === 401) return onUnauthorized();
     showError(recordError, err.message);

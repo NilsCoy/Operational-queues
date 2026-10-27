@@ -26,8 +26,10 @@ const logoutBtn = document.getElementById("logout");
 const adminLink = document.getElementById("admin-link");
 
 let currentWeek = startOfWeek(new Date());
+let loadSeq = 0;
 
 function showError(el, message) {
+  if (!el) return;
   el.textContent = message || "";
   el.hidden = !message;
 }
@@ -52,10 +54,13 @@ function refreshWeekUi() {
 
 async function loadWeek() {
   refreshWeekUi();
+  const seq = ++loadSeq;
   try {
     const data = await api.schedule(toIsoDate(currentWeek));
+    if (seq !== loadSeq) return; // a newer week request already started
     renderWeeks(scheduleEl, data, toIsoDate(currentWeek));
   } catch (err) {
+    if (seq !== loadSeq) return;
     if (err.status === 401) return onUnauthorized();
     scheduleEl.innerHTML = '<p class="empty">Не удалось загрузить расписание</p>';
   }

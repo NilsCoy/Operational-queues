@@ -150,6 +150,24 @@ a.btn-ghost:hover {
   color: #ffffff;
 }
 
+/* small buttons used by row actions in the schedule table */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  border-radius: 8px;
+}
+
+.btn-danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+}
+
 /* ---------- Panel (blocks) ---------- */
 
 .panel {
@@ -290,6 +308,79 @@ a.btn-ghost:hover {
   outline-offset: -2px;
 }
 
+/* multi-line values typed into a textarea keep their line breaks in the cell */
+.cell-multiline {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.cell-empty {
+  color: var(--muted);
+}
+
+/* a day with several records: the date cell is merged, rows stay separated */
+.schedule-table td.day-cell {
+  background: var(--surface);
+  vertical-align: top;
+  border-right: 1.5px solid var(--border);
+  white-space: nowrap;
+}
+
+.day-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.day-weekday {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.day-date {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-table tr.day-first td {
+  border-top: 1.5px solid var(--border);
+}
+
+.schedule-table tr.day-row:first-child td {
+  border-top: none;
+}
+
+.schedule-table tr.day-empty td {
+  color: var(--muted);
+}
+
+/* edit/delete buttons column in the admin table */
+.row-actions {
+  white-space: nowrap;
+  text-align: right;
+  width: 1%;
+}
+
+.schedule-table thead th:last-child {
+  width: 1%;
+}
+
+.row-actions .btn + .btn {
+  margin-left: 6px;
+}
+
+/* compact icon buttons in the actions column */
+.schedule-table td.row-actions .btn-sm {
+  padding: 3px 7px;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  border-radius: 6px;
+}
+
 .schedule-empty {
   width: 100%;
   text-align: center;
@@ -339,7 +430,18 @@ a.btn-ghost:hover {
   color: var(--ink);
   width: 100%;
   min-height: 44px;
+}
+
+/* multi-line record values need room; single-line inputs stay compact */
+.form-grid-input input:not([type="date"]),
+.form-grid-input select {
   height: 44px;
+}
+
+.form-grid-input textarea {
+  min-height: 88px;
+  height: auto;
+  line-height: 1.45;
 }
 
 .form-grid-input input:focus-visible,
@@ -352,6 +454,13 @@ a.btn-ghost:hover {
 .form-grid button {
   justify-self: start;
   align-self: end;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 /* ---------- Status pills ---------- */
@@ -404,6 +513,8 @@ a.btn-ghost:hover {
 .modal-card {
   width: 100%;
   max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
   background: var(--surface);
   border: 1.5px solid var(--border-strong);
   border-radius: 16px;
@@ -453,7 +564,8 @@ a.btn-ghost:hover {
 }
 
 .form-column input,
-.form-column textarea {
+.form-column textarea,
+.form-column select {
   font-family: var(--font-body);
   font-size: 1rem;
   padding: 12px;
@@ -464,7 +576,8 @@ a.btn-ghost:hover {
 }
 
 .form-column input:focus-visible,
-.form-column textarea {
+.form-column textarea:focus-visible,
+.form-column select:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
@@ -476,6 +589,91 @@ a.btn-ghost:hover {
   font-size: 0.85rem;
   font-weight: 700;
   margin: 0;
+}
+
+/* ---------- Pin role selector (styled as a button) ---------- */
+
+.pin-role {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 12px 40px 12px 20px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-strong);
+  background-color: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 80ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.pin-role:hover:not(:disabled) {
+  background-color: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+.pin-role:active:not(:disabled) { transform: scale(0.97); }
+
+.pin-role:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.pin-role option {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* role badges inside the pins table */
+.pin-role-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  color: var(--muted);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.pin-role-badge.pin-role-admin {
+  color: #ffffff;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.pin-table { margin-top: 16px; }
+
+.pin-hash {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pin-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 18px 12px;
+}
+
+.pin-created {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
 
 /* ---------- Responsive ---------- */
@@ -490,10 +688,12 @@ a.btn-ghost:hover {
   .week-nav { flex-direction: column; gap: 10px; }
   .week-nav strong { min-width: 0; }
 
-  .schedule-table {
-    display: block;
+  #schedule {
     overflow-x: auto;
-    white-space: nowrap;
+  }
+
+  .schedule-table {
+    min-width: 640px;
   }
 
   .schedule-table thead th,
@@ -511,5 +711,5 @@ a.btn-ghost:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  button, a.btn { transition: none; }
+  button, a.btn, .pin-role { transition: none; }
 }
