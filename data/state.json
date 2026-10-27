@@ -11,9 +11,33 @@
       "day": "2026-10-19",
       "big_operations": "test2",
       "small_operations": ""
+    },
+    {
+      "id": 3,
+      "day": "2026-10-20",
+      "big_operations": "sadadasd\n\nasdasda\n\n\n\nsadsad",
+      "small_operations": "asdasdadsda"
+    },
+    {
+      "id": 4,
+      "day": "2026-10-26",
+      "big_operations": "",
+      "small_operations": ""
+    },
+    {
+      "id": 5,
+      "day": "2026-10-20",
+      "big_operations": "",
+      "small_operations": ""
+    },
+    {
+      "id": 6,
+      "day": "2026-10-20",
+      "big_operations": "sadd\nasdasd\na\nsdasd",
+      "small_operations": ""
     }
   ],
-  "next_record_id": 3,
+  "next_record_id": 7,
   "pins": [
     {
       "pin_hash": "pbkdf2_sha256$120000$71f96fd9381805dd504376a2ac64b0af$16d8ff857025efb3388a9d812cb08223de8e420e9a1e8d8b64d028f88023e91b",
