@@ -1,98 +1,68 @@
-<div align="center">
+# Operational-queues
 
-# NextUp
+Self-hosted web app for planning and viewing operational queues: an admin fills a weekly schedule of large and small operations, and users see the published schedule week by week.
 
-Self-hosted, realtime take-a-number queueing system.
+## Pages
 
-[![CI](https://img.shields.io/github/actions/workflow/status/DevBytAmir/nextup/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=1f1b16&color=ff6a1a)](https://github.com/DevBytAmir/nextup/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/Version-1.0.0-d94f00?style=for-the-badge&labelColor=1f1b16)](CHANGELOG.md)
-[![License](https://img.shields.io/badge/License-Apache%202.0-8a8478?style=for-the-badge&labelColor=1f1b16)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-ff6a1a?style=for-the-badge&labelColor=1f1b16)](pyproject.toml)
-
-</div>
-
----
-
-NextUp runs a shared queue for any walk-up service line: one screen issues
-sequential numbers, any number of counters serve customers from that single
-line, a TV or monitor shows live queue status with an optional beep or
-spoken announcement, and an admin screen gives full manual control.
-
-<div align="center">
-
-| Page | URL | Access |
+| Page | Path | Access |
 |:---|:---:|:---:|
-| Issue number | `/number` | PIN |
-| Counter | `/counter` | PIN |
-| Admin | `/admin` | PIN |
-| TV display | `/tv` | Public, read-only |
-
-</div>
+| User schedule | `/frontend/user/index.html` | Public, read-only |
+| Admin | `/frontend/admin/index.html` | PIN |
 
 ## Features
 
-- Single shared queue with sequential numbering
-- Bulk-issue numbers from the admin screen, for pre-registered attendees
-  or seeding the queue ahead of time
-- Any number of service counters, configurable at runtime, each with its
-  own PIN
-- Live updates over WebSocket to every connected screen
-- Skip, requeue, reorder, delete, and recall-previous, all from the admin
-  screen
-- Optional beep or spoken announcement when a number is called
-- PIN-protected staff pages; PINs are never sent to a client
-- Mobile-responsive layout
-- Single-file JSON persistence with crash-safe atomic writes, no database
-  required
+- Weekly schedule with day-by-day records for large and small operations
+- Multiple records per day: adding a record for an existing day appends a new entry instead of overwriting it
+- Multi-line values: operation descriptions are entered in `textarea` fields and keep their line breaks in the table
+- Edit and delete every record from the admin screen (`PUT` / `DELETE` by record id)
+- Date column merged per day (`rowspan`), with a compact actions column
+- Pin-role selector styled like the buttons
+- Week navigation with a week picker and previous / next controls
 
 ## Architecture
 
-- **Backend**: FastAPI and Uvicorn, single process, a single `asyncio.Lock`
-  around every ticket mutation so two "Call Next" clicks can never claim the
-  same ticket.
-- **Realtime**: one `/ws` WebSocket endpoint; every mutation broadcasts the
-  updated queue to all connected pages.
-- **Persistence**: a single `data/state.json` file, loaded at startup and
-  rewritten atomically after every mutation.
-- **Frontend**: plain HTML, CSS, and vanilla JavaScript. No build step, no
-  framework.
+- **Backend** (`backend/`): FastAPI and Uvicorn, PIN-based auth, JSON state in `data/state.json` written atomically. Runs on Python 3.11.
+  - `backend/app/main.py` — app factory and static mounts
+  - `backend/app/routes.py` — schedule, admin records and pin endpoints
+  - `backend/app/records.py` — record CRUD (`list_records`, `add_record`, `update_record`, `delete_record`)
+  - `backend/app/store.py` — state persistence
+  - `backend/app/auth.py` — PIN hashing and sessions
+- **Frontend** (`frontend/`): plain HTML, CSS and vanilla JavaScript, no build step.
+  - `frontend/shared/schedule.js` — `escapeHtml` and `renderWeeks(container, records, weekStartIso, { editable })`
+  - `frontend/shared/api.js` — `createRecord`, `updateRecord`, `deleteRecord`, schedule fetch
+  - `frontend/shared/style.css` — shared styles (tables, forms, buttons, pin-role)
+  - `frontend/admin/` — admin form and editable schedule table
+  - `frontend/user/` — read-only schedule view
+
+## API
+
+- `GET /api/schedule` — `{ weeks: [...], records: [...] }` for the requested week
+- `POST /api/admin/records` — add a new record (always appends)
+- `PUT /api/admin/records/{id}` — update a record
+- `DELETE /api/admin/records/{id}` — delete a record
 
 ## Getting started
 
-Requires Python 3.11 or newer.
+Requires Python 3.11.
 
 ```bash
-python -m venv .venv
-./.venv/bin/pip install -e .[dev]      # .venv\Scripts\pip on Windows
-./.venv/bin/python -m uvicorn backend.app.main:app --reload
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn backend.app.main:app --reload
 ```
 
-Then open `http://127.0.0.1:8000/number`, `/counter`, `/admin`, and `/tv`.
-
-Default PINs: numbering `1111`, counters `2222` / `3333`, admin `9999`.
-Change them from the admin settings panel, or by editing `data/state.json`
-directly before first run.
+Then open `http://127.0.0.1:8000/frontend/user/index.html` and `http://127.0.0.1:8000/frontend/admin/index.html`.
 
 ## Testing
 
 ```bash
-./.venv/bin/python -m ruff check backend
-./.venv/bin/python -m ruff format --check backend
-./.venv/bin/python -m pytest backend/tests -v
+venv\Scripts\python -m pytest backend/tests -v
 ```
-
-Ticket claiming, reordering, skip/requeue/delete, PIN auth, and the
-no-double-claim guarantee are covered by automated tests. The frontend
-pages are covered by a manual smoke test that walks through issuing a
-number, calling and completing it, skipping and requeuing a ticket,
-deleting a ticket, reordering the waiting list, confirming a wrong PIN is
-rejected on `/number`, `/counter`, and `/admin`, and confirming `/tv`
-updates live across two browser windows with no refresh and never exposes
-a PIN in its WebSocket traffic.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

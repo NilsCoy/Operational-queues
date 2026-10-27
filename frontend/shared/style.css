@@ -327,6 +327,12 @@ a.btn-ghost:hover {
   white-space: nowrap;
 }
 
+/* the date column is narrow: it shrinks to its content width */
+.schedule-table thead th:first-child,
+.schedule-table td.day-cell {
+  width: 1%;
+}
+
 .day-label {
   display: flex;
   flex-direction: column;
