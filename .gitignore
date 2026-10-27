@@ -221,6 +221,7 @@ __marimo__/
 
 # PyCharm
 .idea
+pyproject.toml
 
 # Data
 data/
