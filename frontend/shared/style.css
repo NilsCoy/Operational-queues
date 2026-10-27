@@ -371,10 +371,6 @@ a.btn-ghost:hover {
   width: 1%;
 }
 
-.schedule-table thead th:last-child {
-  width: 1%;
-}
-
 .row-actions .btn + .btn {
   margin-left: 6px;
 }
