@@ -2,13 +2,12 @@
 
 # Operational queues
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-8a8478?style=for-the-badge&labelColor=1f1b16)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-ff6a1a?style=for-the-badge&labelColor=1f1b16)](pyproject.toml)
 
 Self-hosted web app for planning and viewing operational queues: an admin fills a weekly schedule of large and small operations, and users see the published schedule week by week.
 
 ---
-
-[![License](https://img.shields.io/badge/License-Apache%202.0-8a8478?style=for-the-badge&labelColor=1f1b16)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-ff6a1a?style=for-the-badge&labelColor=1f1b16)](pyproject.toml)
 
 
 ## Based on [NextUp](https://github.com/DevBytAmir/nextup)
