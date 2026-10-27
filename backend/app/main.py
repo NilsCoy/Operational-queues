@@ -44,9 +44,7 @@ def create_app(data_path: Path) -> FastAPI:
     async def bootstrap_admin(request: Request):
         state = request.app.state.queue_state
         if has_admin(state):
-            return JSONResponse(
-                status_code=409, content={"detail": "admin already exists"}
-            )
+            return JSONResponse(status_code=409, content={"detail": "admin already exists"})
         body = await request.json()
         password = str(body.get("password", ""))
         if len(password.strip()) < 4:
@@ -55,9 +53,7 @@ def create_app(data_path: Path) -> FastAPI:
                 content={"detail": "password must be at least 4 characters"},
             )
         async with request.app.state.lock:
-            state.pins.append(
-                PinCode(pin_hash=hash_pin(password), role=Role.ADMIN, label="Admin")
-            )
+            state.pins.append(PinCode(pin_hash=hash_pin(password), role=Role.ADMIN, label="Admin"))
             await asyncio.to_thread(save_state, app.state.data_path, state)
         return {"has_admin": True}
 
@@ -67,9 +63,7 @@ def create_app(data_path: Path) -> FastAPI:
         async def handler():
             index = FRONTEND_DIR / page_name / "index.html"
             if not index.exists():
-                return JSONResponse(
-                    status_code=404, content={"detail": "page not found"}
-                )
+                return JSONResponse(status_code=404, content={"detail": "page not found"})
             return FileResponse(index)
 
         return handler

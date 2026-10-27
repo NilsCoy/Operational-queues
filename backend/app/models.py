@@ -40,8 +40,7 @@ class AppState(BaseModel):
 def pin_public_view(state: AppState) -> list[dict]:
     """PIN list for the admin UI. Hashes are never exposed."""
     return [
-        {"role": p.role.value, "label": p.label, "hash_prefix": p.pin_hash[:12]}
-        for p in state.pins
+        {"role": p.role.value, "label": p.label, "hash_prefix": p.pin_hash[:12]} for p in state.pins
     ]
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -36,9 +37,7 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
     state = request.app.state.queue_state
     role = find_role(payload.password, state)
     if role is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     token = request.app.state.sessions.create(role)
     return LoginResponse(token=token, role=role)
 
@@ -63,9 +62,7 @@ async def me(request: Request) -> dict:
 
 
 async def _persist(request: Request) -> None:
-    await asyncio.to_thread(
-        save_state, request.app.state.data_path, request.app.state.queue_state
-    )
+    await asyncio.to_thread(save_state, request.app.state.data_path, request.app.state.queue_state)
 
 
 class RecordCreate(BaseModel):
@@ -81,7 +78,7 @@ class RecordUpdate(BaseModel):
 
 
 @router.get("/schedule")
-async def schedule(request: Request, week_of: date | None = Query(default=None)) -> dict:
+async def schedule(request: Request, week_of: Annotated[date | None, Query()] = None) -> dict:
     """Public schedule (used by /user). `week_of` limits the result to that week."""
     state = request.app.state.queue_state
     records = list_records(state, week_of)
@@ -92,7 +89,7 @@ async def schedule(request: Request, week_of: date | None = Query(default=None))
 
 
 @router.get("/admin/records", dependencies=[Depends(ADMIN)])
-async def read_records(request: Request, week_of: date | None = Query(default=None)) -> dict:
+async def read_records(request: Request, week_of: Annotated[date | None, Query()] = None) -> dict:
     state = request.app.state.queue_state
     records = list_records(state, week_of)
     return {
@@ -125,9 +122,7 @@ async def edit_record(record_id: int, payload: RecordUpdate, request: Request) -
             payload.small_operations,
         )
         if record is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="record not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
         await _persist(request)
     return record.model_dump(mode="json")
 
@@ -137,9 +132,7 @@ async def remove_record(record_id: int, request: Request) -> dict:
     async with request.app.state.lock:
         deleted = delete_record(request.app.state.queue_state, record_id)
         if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="record not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
         await _persist(request)
     return {"deleted": True}
 
@@ -165,14 +158,10 @@ async def create_pin(payload: PinCreate, request: Request) -> dict:
             detail="password must be at least 4 characters",
         )
     if find_role(password, state) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="password already in use"
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="password already in use")
     async with request.app.state.lock:
         state.pins.append(
-            PinCode(
-                pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip()
-            )
+            PinCode(pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip())
         )
         await _persist(request)
     return {"pins": pin_public_view(state)}
@@ -184,13 +173,9 @@ async def delete_pin(pin_index: int, request: Request) -> dict:
     state = request.app.state.queue_state
     async with request.app.state.lock:
         if pin_index < 0 or pin_index >= len(state.pins):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="pin not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pin not found")
         removed = state.pins.pop(pin_index)
-        if removed.role == Role.ADMIN and not any(
-            p.role == Role.ADMIN for p in state.pins
-        ):
+        if removed.role == Role.ADMIN and not any(p.role == Role.ADMIN for p in state.pins):
             state.pins.insert(pin_index, removed)
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
