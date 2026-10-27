@@ -71,7 +71,6 @@ Then open `http://127.0.0.1:8000/user` or `http://127.0.0.1:8000/admin`.
 ## Testing
 
 ```bash
-make test
 make lint
 make format
 ```
