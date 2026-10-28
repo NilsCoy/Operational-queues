@@ -23,6 +23,7 @@ const loginPassword = document.querySelector("#login-password");
 const loginError = document.querySelector("#login-error");
 const loginForm = document.querySelector("#login-form");
 const logoutBtn = document.querySelector("#logout");
+const adminLink = document.querySelector("#admin-link");
 
 let currentWeek = startOfWeek(new Date());
 let loadSeq = 0;
@@ -40,10 +41,15 @@ function onUnauthorized() {
 }
 
 function refreshSessionUi() {
-  const loggedIn = Boolean(getRole());
+  const role = getRole();
+  const loggedIn = Boolean(role);
+  const isAdmin = role === "admin";
+
   loginModal.hidden = loggedIn;
   appSection.hidden = !loggedIn;
   logoutBtn.hidden = !loggedIn;
+  if (adminLink) adminLink.hidden = !isAdmin;
+
   document.body.classList.toggle("is-guest", !loggedIn);
   if (!loggedIn) {
     showLoginError("");
