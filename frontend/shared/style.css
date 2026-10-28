@@ -673,6 +673,96 @@ a.btn-ghost:hover {
   overflow-wrap: anywhere;
 }
 
+/* ---------- Search bar ---------- */
+
+/* оба варианта классов: "-bar/-input" из HTML и search-bar/search-input */
+.-bar,
+.search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0 auto 18px;
+  padding: 8px 12px;
+}
+
+/* поле ввода — как .week-picker input, но растягивается и ограничено */
+.-input,
+.search-input {
+  flex: 1 1 260px;
+  max-width: 420px;
+  min-width: 160px;
+  padding: 8px 14px;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 38px;
+}
+
+.-input:focus-visible,
+.search-input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* кнопки поиска — размер как у .week-picker button */
+.-bar button,
+.search-bar button {
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  border-color: var(--border);
+  color: var(--muted);
+  line-height: 1;
+  min-height: 38px;
+}
+
+/* «Найти» — акцентная, как основная кнопка перехода */
+.-bar button[data-search-find],
+.search-bar button[data-search-find] {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--ink);
+}
+
+.-bar button[data-search-find]:hover:not(:disabled),
+.search-bar button[data-search-find]:hover:not(:disabled) {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+
+/* компактные кнопки ↑ ↓ ✕ */
+.-bar button[data-search-prev],
+.-bar button[data-search-next],
+.-bar button[data-search-clear],
+.search-bar button[data-search-prev],
+.search-bar button[data-search-next],
+.search-bar button[data-search-clear] {
+  padding: 8px 12px;
+  min-width: 38px;
+}
+
+/* статус «N из M» */
+.-bar [data-search-status],
+.search-bar [data-search-status] {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* подсветка совпадений */
+mark.\-hit { background: #ffe58f; padding: 0 1px; border-radius: 2px; }
+mark.\-hit-current { background: #ffb300; outline: 2px solid #ff8f00; }
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 720px) {
@@ -697,6 +787,12 @@ a.btn-ghost:hover {
   .schedule-table tbody td {
     padding: 10px 12px;
   }
+
+  .-input,
+  .search-input {
+    flex: 1 1 100%;
+    max-width: none;
+  }
 }
 
 @media (max-width: 480px) {
@@ -705,6 +801,16 @@ a.btn-ghost:hover {
   .panel { padding: 18px; }
   .topbar-actions { flex-wrap: wrap; justify-content: center; }
   #app { gap: 24px; }
+
+  .-bar,
+  .search-bar {
+    justify-content: stretch;
+  }
+
+  .-bar button,
+  .search-bar button {
+    flex: 1 1 auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

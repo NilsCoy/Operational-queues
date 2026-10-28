@@ -1,14 +1,14 @@
-// Keyword search over the schedule table shared by the user and admin pages.
-// Matches are collected from the "big" and "small" operation cells only
-// (td[data-col="big"], td[data-col="small"]), wrapped in <mark>, and the
-// containing row is highlighted so the table stays readable while navigating.
+// Keyword search over the whole schedule (all dates with records), shared by
+// the user and admin pages. The backend filters records by `q`; this module
+// collects matches from the rendered cells (td[data-col="big"],
+// td[data-col="small"]), highlights them with <mark>, and lets the user jump
+// between hits with Найти / ↑ / ↓.
 
 const HIT_CLASS = "-hit";
 const CURRENT_CLASS = "-hit-current";
 const ROW_CLASS = "-row-hit";
-const EMPTY = '<span class="cell-empty">\u2014</span>';
 
-function normalize(value) {
+export function normalize(value) {
   return String(value ?? "").toLocaleLowerCase("ru");
 }
 
@@ -34,7 +34,9 @@ function markHtml(text, query) {
   let cursor = 0;
   while (index !== -1) {
     if (index > cursor) parts.push(escapeHtml(text.slice(cursor, index)));
-    parts.push(`<mark class="${HIT_CLASS}">${escapeHtml(text.slice(index, index + needle.length))}</mark>`);
+    parts.push(
+      `<mark class="${HIT_CLASS}">${escapeHtml(text.slice(index, index + needle.length))}</mark>`,
+    );
     cursor = index + needle.length;
     index = haystack.indexOf(needle, cursor);
   }
@@ -56,7 +58,9 @@ function applyToCell(cell, query) {
 
 function parseOriginal(cell) {
   if (cell.dataset.searchOriginal != null) return;
-  cell.dataset.searchOriginal = cell.innerHTML.trim() ? cell.innerHTML : EMPTY;
+  cell.dataset.searchOriginal = cell.innerHTML.trim()
+    ? cell.innerHTML
+    : '<span class="cell-empty">\u2014</span>';
 }
 
 function clearRowHighlight(container) {
@@ -94,7 +98,9 @@ export function mount({ root, container, bar }) {
   let current = -1;
 
   function cells() {
-    return Array.from(container.querySelectorAll('td[data-col="big"], td[data-col="small"]'));
+    return Array.from(
+      container.querySelectorAll('td[data-col="big"], td[data-col="small"]'),
+    );
   }
 
   function focusHit(index, { scroll = false } = {}) {
@@ -136,6 +142,7 @@ export function mount({ root, container, bar }) {
     current = -1;
   }
 
+  // Re-highlights the currently rendered table without touching the query.
   function refresh() {
     clearHits();
     const needle = query.trim();
@@ -185,6 +192,10 @@ export function mount({ root, container, bar }) {
     refresh();
   }
 
+  function getQuery() {
+    return (input ? input.value : query).trim();
+  }
+
   function clear() {
     if (input) input.value = "";
     query = "";
@@ -193,25 +204,36 @@ export function mount({ root, container, bar }) {
   }
 
   if (input) {
-    input.addEventListener("input", () => {
-      query = input.value;
-      refresh();
-    });
     input.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        findNearest();
-      } else if (event.key === "Escape") {
+      if (event.key === "Escape") {
         event.preventDefault();
         clear();
       }
     });
   }
-
-  if (findBtn) findBtn.addEventListener("click", findNearest);
   if (nextBtn) nextBtn.addEventListener("click", next);
   if (prevBtn) prevBtn.addEventListener("click", prev);
   if (clearBtn) clearBtn.addEventListener("click", clear);
 
-  return { refresh, findNearest, next, prev, clear, setQuery };
+  return {
+    refresh,
+    findNearest,
+    next,
+    prev,
+    clear,
+    setQuery,
+    getQuery,
+    // Wire the "Найти" button to whatever performs the (server) search.
+    onFind(handler) {
+      if (findBtn) findBtn.addEventListener("click", () => handler(getQuery()));
+      if (input) {
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            handler(getQuery());
+          }
+        });
+      }
+    },
+  };
 }

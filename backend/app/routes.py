@@ -78,10 +78,16 @@ class RecordUpdate(BaseModel):
 
 
 @router.get("/schedule")
-async def schedule(request: Request, week_of: Annotated[date | None, Query()] = None) -> dict:
-    """Public schedule (used by /user). `week_of` limits the result to that week."""
+async def schedule(
+    request: Request,
+    week_of: Annotated[date | None, Query()] = None,
+    q: Annotated[str | None, Query()] = None,
+) -> dict:
+    """Public schedule (used by /user). `week_of` limits the result to that week,
+    `q` keeps only records whose big/small operations contain the keyword.
+    Without `week_of` the search covers all dates with records."""
     state = request.app.state.queue_state
-    records = list_records(state, week_of)
+    records = list_records(state, week_of, q)
     return {
         "weeks": group_by_week(records),
         "records": [r.model_dump(mode="json") for r in records],
@@ -89,9 +95,13 @@ async def schedule(request: Request, week_of: Annotated[date | None, Query()] = 
 
 
 @router.get("/admin/records", dependencies=[Depends(ADMIN)])
-async def read_records(request: Request, week_of: Annotated[date | None, Query()] = None) -> dict:
+async def read_records(
+    request: Request,
+    week_of: Annotated[date | None, Query()] = None,
+    q: Annotated[str | None, Query()] = None,
+) -> dict:
     state = request.app.state.queue_state
-    records = list_records(state, week_of)
+    records = list_records(state, week_of, q)
     return {
         "weeks": group_by_week(records),
         "records": [r.model_dump(mode="json") for r in records],

@@ -1,6 +1,7 @@
 // Read-only schedule page. Content is hidden until the user logs in with a password.
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { renderWeeks } from "../shared/schedule.js";
+import { mount } from "../shared/search.js";
 import {
   formatWeekRange,
   startOfWeek,
@@ -9,42 +10,45 @@ import {
   parseIsoDate,
 } from "../shared/dates.js";
 
-const appSection = document.getElementById("app");
-const scheduleEl = document.getElementById("schedule");
-const weekLabel = document.getElementById("week-label");
-const prevWeek = document.getElementById("prev-week");
-const nextWeek = document.getElementById("next-week");
-const jumpDay = document.getElementById("jump-day");
-const jumpGo = document.getElementById("jump-go");
-const jumpToday = document.getElementById("jump-today");
-
-const loginModal = document.getElementById("login-modal");
-const loginForm = document.getElementById("login-form");
-const loginPassword = document.getElementById("login-password");
-const loginError = document.getElementById("login-error");
-const logoutBtn = document.getElementById("logout");
-const adminLink = document.getElementById("admin-link");
+const appSection = document.querySelector("#app");
+const scheduleEl = document.querySelector("#schedule");
+const weekLabel = document.querySelector("#week-label");
+const searchBar = document.querySelector("[data-search-bar]");
+const prevWeekBtn = document.querySelector("#prev-week");
+const nextWeekBtn = document.querySelector("#next-week");
+const todayBtn = document.querySelector("#jump-today");
+const jumpDay = document.querySelector("#jump-day");
+const loginModal = document.querySelector("#login-modal");
+const loginPassword = document.querySelector("#login-password");
+const loginError = document.querySelector("#login-error");
+const loginForm = document.querySelector("#login-form");
+const logoutBtn = document.querySelector("#logout");
 
 let currentWeek = startOfWeek(new Date());
 let loadSeq = 0;
+let search = null;
+let searchActive = false;
 
-function showError(el, message) {
-  if (!el) return;
-  el.textContent = message || "";
-  el.hidden = !message;
+function showLoginError(message) {
+  loginError.textContent = message || "";
+  loginError.hidden = !message;
 }
 
-// Logged out: the whole inner content is hidden and the login modal is shown.
-// The admin panel link is visible only for the admin role, never for a plain user.
+function onUnauthorized() {
+  clearSession();
+  refreshSessionUi();
+}
+
 function refreshSessionUi() {
-  const role = getRole();
-  const loggedIn = Boolean(role);
+  const loggedIn = Boolean(getRole());
+  loginModal.hidden = loggedIn;
   appSection.hidden = !loggedIn;
   logoutBtn.hidden = !loggedIn;
-  adminLink.hidden = role !== "admin";
-  loginModal.hidden = loggedIn;
   document.body.classList.toggle("is-guest", !loggedIn);
-  if (!loggedIn) requestAnimationFrame(() => loginPassword.focus());
+  if (!loggedIn) {
+    showLoginError("");
+    requestAnimationFrame(() => loginPassword.focus());
+  }
 }
 
 function refreshWeekUi() {
@@ -53,12 +57,17 @@ function refreshWeekUi() {
 }
 
 async function loadWeek() {
+  searchActive = false;
   refreshWeekUi();
   const seq = ++loadSeq;
   try {
     const data = await api.schedule(toIsoDate(currentWeek));
-    if (seq !== loadSeq) return; // a newer week request already started
+    if (seq !== loadSeq) return;
     renderWeeks(scheduleEl, data, toIsoDate(currentWeek));
+    if (search) {
+      search.clear();
+      search.refresh();
+    }
   } catch (err) {
     if (seq !== loadSeq) return;
     if (err.status === 401) return onUnauthorized();
@@ -66,67 +75,78 @@ async function loadWeek() {
   }
 }
 
-function goToDay(iso) {
-  if (!iso) return;
-  currentWeek = startOfWeek(parseIsoDate(iso));
-  loadWeek();
+// Search across all dates that have records; the backend filters by `q`.
+async function run(query) {
+  const needle = String(query || "").trim();
+  if (!needle) {
+    if (search) search.clear();
+    await loadWeek();
+    return;
+  }
+  searchActive = true;
+  const seq = ++loadSeq;
+  try {
+    const data = await api.schedule(null, needle);
+    if (seq !== loadSeq) return;
+    renderWeeks(scheduleEl, data, toIsoDate(currentWeek), { allDates: true });
+    if (search) {
+      search.setQuery(needle);
+      search.findNearest();
+    }
+  } catch (err) {
+    if (seq !== loadSeq) return;
+    if (err.status === 401) return onUnauthorized();
+    scheduleEl.innerHTML = '<p class="empty">Ошибка поиска</p>';
+  }
 }
 
-function onUnauthorized() {
-  clearSession();
-  refreshSessionUi();
+function mountBar() {
+  if (!scheduleEl || !searchBar) return;
+  search = mount({ container: scheduleEl, bar: searchBar });
+  if (search) search.onFind(run);
 }
 
-prevWeek.addEventListener("click", () => {
+prevWeekBtn.addEventListener("click", () => {
   currentWeek = addWeeks(currentWeek, -1);
   loadWeek();
 });
-nextWeek.addEventListener("click", () => {
+nextWeekBtn.addEventListener("click", () => {
   currentWeek = addWeeks(currentWeek, 1);
   loadWeek();
 });
-if (jumpGo) jumpGo.addEventListener("click", () => goToDay(jumpDay.value));
+todayBtn.addEventListener("click", () => {
+  currentWeek = startOfWeek(parseIsoDate(todayIso()));
+  loadWeek();
+});
 if (jumpDay) {
-  jumpDay.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      goToDay(jumpDay.value);
-    }
+  jumpDay.addEventListener("change", () => {
+    const picked = parseIsoDate(jumpDay.value);
+    if (!picked) return;
+    currentWeek = startOfWeek(picked);
+    loadWeek();
   });
 }
-if (jumpToday) jumpToday.addEventListener("click", () => goToDay(toIsoDate(new Date())));
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  showError(loginError, "");
-  const password = loginPassword.value;
-  if (!password) {
-    showError(loginError, "Введите пароль");
-    return;
-  }
+  showLoginError("");
   try {
-    const { token, role } = await api.login(password);
-    setSession(token, role);
+    const data = await api.login(loginPassword.value);
+    setSession(data.token, data.role || "user");
     loginPassword.value = "";
     refreshSessionUi();
     loadWeek();
-    if (role === "admin") {
-      window.location.href = "/admin";
-    }
   } catch (err) {
-    showError(loginError, err.status === 401 ? "Неверный пароль" : err.message);
+    showLoginError(err.message || "Неверный пароль");
   }
 });
 
-logoutBtn.addEventListener("click", async () => {
-  try {
-    await api.logout();
-  } catch {
-    // token may already be invalid
-  }
+logoutBtn.addEventListener("click", () => {
   clearSession();
   refreshSessionUi();
 });
 
+mountBar();
 refreshSessionUi();
+refreshWeekUi();
 if (getRole()) loadWeek();

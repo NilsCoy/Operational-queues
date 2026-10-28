@@ -52,8 +52,13 @@ async function request(method, path, body) {
   return data;
 }
 
-function weekQuery(weekOf) {
-  return weekOf ? `?week_of=${encodeURIComponent(weekOf)}` : "";
+function weekQuery(weekOf, q) {
+  const params = new URLSearchParams();
+  if (weekOf) params.set("week_of", weekOf);
+  const needle = q == null ? "" : String(q).trim();
+  if (needle) params.set("q", needle);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
 export const api = {
@@ -65,9 +70,9 @@ export const api = {
   logout: () => request("POST", "/logout"),
   me: () => request("GET", "/me"),
 
-  schedule: (weekOf) => request("GET", `/schedule${weekQuery(weekOf)}`),
+  schedule: (weekOf, q) => request("GET", `/schedule${weekQuery(weekOf, q)}`),
 
-  adminRecords: (weekOf) => request("GET", `/admin/records${weekQuery(weekOf)}`),
+  adminRecords: (weekOf, q) => request("GET", `/admin/records${weekQuery(weekOf, q)}`),
   createRecord: (payload) => request("POST", "/admin/records", payload),
   updateRecord: (id, payload) => request("PUT", `/admin/records/${id}`, payload),
   deleteRecord: (id) => request("DELETE", `/admin/records/${id}`),

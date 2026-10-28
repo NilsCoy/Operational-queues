@@ -29,6 +29,14 @@
         <button type="button" class="btn" id="jump-go">Перейти</button>
         <button type="button" class="btn btn-ghost" id="jump-today">Сегодня</button>
       </div>
+      <div class="-bar" data-search-bar>
+        <input type="text" class="-input" data-search-input placeholder="Поиск по операциям…">
+        <button type="button" data-search-find>Найти</button>
+        <button type="button" data-search-prev title="Предыдущее">↑</button>
+        <button type="button" data-search-next title="Следующее">↓</button>
+        <button type="button" data-search-clear title="Сбросить">✕</button>
+        <span data-search-status></span>
+      </div>
       <div id="schedule" class="schedule"></div>
     </section>
   </main>

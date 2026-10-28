@@ -1,6 +1,8 @@
 // Renders weekly schedule tables shared by the user and admin pages.
 // Each record occupies its own row; a day with several records keeps the
 // date cell merged (rowspan) so the week stays compact and readable.
+// Data cells carry data-col="big" / data-col="small" so the keyword search
+// (shared/search.js) can find and highlight them.
 import { formatDay, weekdayLabel, startOfWeek, addDays, toIsoDate } from "./dates.js";
 
 export function escapeHtml(value) {
@@ -54,49 +56,82 @@ function recordActions(record, options) {
     </td>`;
 }
 
+function dayLabelHtml(day) {
+  return `<div class="day-label">
+        <span class="day-weekday">${escapeHtml(weekdayLabel(day))}</span>
+        <span class="day-date">${escapeHtml(formatDay(day))}</span>
+      </div>`;
+}
+
 export function renderWeeks(container, data, weekStartIso, options = {}) {
   if (!container) return 0;
   const editable = Boolean(options.editable);
-  const weekStart = startOfWeek(weekStartIso);
-  const groups = groupByDay(normalizeRecords(data));
+  const records = normalizeRecords(data);
+
+  // Search results span many dates, so group by day and render every day that
+  // has records in chronological order instead of a fixed 7-day week.
+  const multiDay = Boolean(options.allDates);
 
   const headCells = ["День", "Большие операции", "Малые операции"];
   if (editable) headCells.push("Действия");
   const colCount = headCells.length;
 
   const rows = [];
-  for (let i = 0; i < 7; i += 1) {
-    const day = addDays(weekStart, i);
-    const iso = toIsoDate(day);
-    const dayRecords = groups.get(iso) || [];
 
-    const dayLabel = `<div class="day-label">
-        <span class="day-weekday">${escapeHtml(weekdayLabel(day))}</span>
-        <span class="day-date">${escapeHtml(formatDay(day))}</span>
-      </div>`;
+  if (multiDay) {
+    const groups = groupByDay(records);
+    const days = Array.from(groups.keys()).sort();
+    if (!days.length) {
+      container.innerHTML = '<p class="schedule-empty">Ничего не найдено</p>';
+      return colCount;
+    }
+    for (const iso of days) {
+      const dayRecords = groups.get(iso) || [];
+      const day = new Date(`${iso}T00:00:00`);
+      dayRecords.forEach((record, index) => {
+        const cells = [];
+        if (index === 0) {
+          cells.push(`<td class="day-cell" rowspan="${dayRecords.length}">${dayLabelHtml(day)}</td>`);
+        }
+        cells.push(`<td data-col="big" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.big_operations)}</td>`);
+        cells.push(`<td data-col="small" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.small_operations)}</td>`);
+        cells.push(recordActions(record, { editable }));
+        const firstClass = index === 0 ? "day-row day-first" : "day-row";
+        rows.push(`<tr class="${firstClass}" data-day="${escapeHtml(iso)}">${cells.join("")}</tr>`);
+      });
+    }
+  } else {
+    const weekStart = startOfWeek(weekStartIso);
+    const groups = groupByDay(records);
+    for (let i = 0; i < 7; i += 1) {
+      const day = addDays(weekStart, i);
+      const iso = toIsoDate(day);
+      const dayRecords = groups.get(iso) || [];
+      const dayLabel = dayLabelHtml(day);
 
-    if (!dayRecords.length) {
-      const emptyCells = `<td><span class="cell-empty">—</span></td><td><span class="cell-empty">—</span></td>`;
-      const actionCell = editable ? '<td class="row-actions"></td>' : "";
-      rows.push(`<tr class="day-row day-empty">
+      if (!dayRecords.length) {
+        const emptyCells = `<td data-col="big"><span class="cell-empty">—</span></td><td data-col="small"><span class="cell-empty">—</span></td>`;
+        const actionCell = editable ? '<td class="row-actions"></td>' : "";
+        rows.push(`<tr class="day-row day-empty">
         <td class="day-cell">${dayLabel}</td>${emptyCells}${actionCell}
       </tr>`);
-      continue;
-    }
-
-    dayRecords.forEach((record, index) => {
-      const cells = [];
-      if (index === 0) {
-        cells.push(
-          `<td class="day-cell" rowspan="${dayRecords.length}">${dayLabel}</td>`,
-        );
+        continue;
       }
-      cells.push(`<td>${cellHtml(record.big_operations)}</td>`);
-      cells.push(`<td>${cellHtml(record.small_operations)}</td>`);
-      cells.push(recordActions(record, { editable }));
-      const firstClass = index === 0 ? " day-row day-first" : " day-row";
-      rows.push(`<tr class="${firstClass.trim()}" data-day="${escapeHtml(iso)}">${cells.join("")}</tr>`);
-    });
+
+      dayRecords.forEach((record, index) => {
+        const cells = [];
+        if (index === 0) {
+          cells.push(
+            `<td class="day-cell" rowspan="${dayRecords.length}">${dayLabel}</td>`,
+          );
+        }
+        cells.push(`<td data-col="big" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.big_operations)}</td>`);
+        cells.push(`<td data-col="small" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.small_operations)}</td>`);
+        cells.push(recordActions(record, { editable }));
+        const firstClass = index === 0 ? "day-row day-first" : "day-row";
+        rows.push(`<tr class="${firstClass}" data-day="${escapeHtml(iso)}">${cells.join("")}</tr>`);
+      });
+    }
   }
 
   container.innerHTML = `<table class="schedule-table">

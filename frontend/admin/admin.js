@@ -2,6 +2,7 @@
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { formatWeekRange, startOfWeek, addWeeks, toIsoDate, parseIsoDate } from "../shared/dates.js";
 import { renderWeeks, escapeHtml } from "../shared/schedule.js";
+import { mount as create } from "../shared/search.js";
 
 const setupSection = document.getElementById("setup");
 const setupForm = document.getElementById("setup-form");
@@ -25,6 +26,8 @@ const jumpDay = document.getElementById("jump-day");
 const jumpGo = document.getElementById("jump-go");
 const jumpToday = document.getElementById("jump-today");
 const scheduleEl = document.getElementById("schedule");
+const tableTitle = document.getElementById("table-title");
+const searchBar = document.querySelector("[data-search-bar]");
 
 const recordForm = document.getElementById("record-form");
 const recordFormTitle = document.getElementById("record-form-title");
@@ -50,6 +53,8 @@ const pinError = document.getElementById("pin-error");
 let currentWeek = startOfWeek(new Date());
 let hasAdmin = false;
 let weekRecords = [];
+let search = null;
+let searchActive = false;
 
 function showError(el, message) {
   el.textContent = message || "";
@@ -119,17 +124,52 @@ function renderSessionUi() {
 function refreshWeekUi() {
   weekLabel.textContent = formatWeekRange(toIsoDate(currentWeek));
   if (jumpDay) jumpDay.value = toIsoDate(currentWeek);
+  if (tableTitle) {
+    tableTitle.textContent = searchActive ? "Результаты поиска (все даты)" : "Расписание";
+  }
+}
+
+function renderCurrent(data) {
+  weekRecords = Array.isArray(data) ? data : data.records || [];
+  renderWeeks(scheduleEl, weekRecords, toIsoDate(currentWeek), {
+    editable: true,
+    allDates: searchActive,
+  });
 }
 
 async function loadWeek() {
+  searchActive = false;
+  if (search) search.clear();
   refreshWeekUi();
   try {
     const data = await api.adminRecords(toIsoDate(currentWeek));
-    weekRecords = Array.isArray(data) ? data : data.records || [];
-    renderWeeks(scheduleEl, weekRecords, toIsoDate(currentWeek), { editable: true });
+    renderCurrent(data);
   } catch (err) {
     if (err.status === 401) return onUnauthorized();
     scheduleEl.innerHTML = `<p class="schedule-empty">Не удалось загрузить расписание: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// Searches across all dates with records, then jumps to the nearest hit.
+async function run(query) {
+  const needle = String(query || "").trim();
+  if (!needle) {
+    if (search) search.clear();
+    await loadWeek();
+    return;
+  }
+  searchActive = true;
+  refreshWeekUi();
+  try {
+    const data = await api.adminRecords(null, needle);
+    renderCurrent(data);
+    if (search) {
+      search.setQuery(needle);
+      search.findNearest();
+    }
+  } catch (err) {
+    if (err.status === 401) return onUnauthorized();
+    scheduleEl.innerHTML = `<p class="schedule-empty">Ошибка поиска: ${escapeHtml(err.message)}</p>`;
   }
 }
 
@@ -167,6 +207,14 @@ function renderPins(pins) {
     .join("");
 }
 
+// ---- search wiring ----
+
+function mountBar() {
+  if (!scheduleEl || !searchBar) return;
+  search = create({ container: scheduleEl, bar: searchBar });
+  if (search) search.onFind(run);
+}
+
 // ---- record form: add / edit mode ----
 
 function resetRecordForm() {
@@ -196,6 +244,7 @@ function enterApp() {
   closeAuthModal();
   renderSessionUi();
   recordDay.value = toIsoDate(currentWeek);
+  mountBar();
   loadWeek();
 }
 
