@@ -1,37 +1,49 @@
 from __future__ import annotations
 
 import json
-import os
+import sqlite3
 import time
 from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
-from .models import AppState
-
-
-def default_state() -> AppState:
-    return AppState()
+from . import db
+from .models import OperationRecord, PinCode
 
 
-def load_state(path: Path) -> AppState:
-    if not path.exists():
-        state = default_state()
-        save_state(path, state)
-        return state
+class _LegacyState(BaseModel):
+    records: list[OperationRecord] = Field(default_factory=list)
+    pins: list[PinCode] = Field(default_factory=list)
+
+
+def migrate_from_json(conn: sqlite3.Connection, json_path: Path) -> bool:
+    """One-time import of the legacy data/state.json into SQLite.
+
+    The JSON file is renamed to state.json.migrated-<ts> afterwards, so the
+    import never runs twice. Returns True when data was actually imported.
+    """
+    if not json_path.exists():
+        return False
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return AppState.model_validate(data)
-    except (json.JSONDecodeError, ValidationError):
-        backup_path = path.with_suffix(f"{path.suffix}.corrupt-{int(time.time())}")
-        path.rename(backup_path)
-        state = default_state()
-        save_state(path, state)
-        return state
+        state = _LegacyState.model_validate(json.loads(json_path.read_text(encoding="utf-8")))
+    except (json.JSONDecodeError, ValidationError, OSError):
+        json_path.rename(json_path.with_suffix(f"{json_path.suffix}.corrupt-{int(time.time())}"))
+        return False
 
+    if db.list_records(conn) or db.list_pins(conn):
+        json_path.rename(json_path.with_suffix(f"{json_path.suffix}.migrated-{int(time.time())}"))
+        return False
 
-def save_state(path: Path, state: AppState) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
-    tmp_path.write_text(state.model_dump_json(indent=2), encoding="utf-8")
-    os.replace(tmp_path, path)
+    for record in state.records:
+        conn.execute(
+            "INSERT INTO records (day, big_operations, small_operations) VALUES (?, ?, ?)",
+            (record.day.isoformat(), record.big_operations, record.small_operations),
+        )
+    for pin in state.pins:
+        conn.execute(
+            "INSERT INTO pins (pin_hash, role, label) VALUES (?, ?, ?)",
+            (pin.pin_hash, pin.role.value, pin.label),
+        )
+    conn.commit()
+    json_path.rename(json_path.with_suffix(f"{json_path.suffix}.migrated-{int(time.time())}"))
+    return True

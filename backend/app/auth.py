@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from fastapi import HTTPException, Request, status
 
-from .models import AppState, Role
+from .models import PinCode, Role
 
 PBKDF2_ITERATIONS = 120_000
 PBKDF2_ALGO = "sha256"
@@ -40,16 +40,16 @@ def verify_pin(pin: str, stored: str) -> bool:
     return hmac.compare_digest(digest.hex(), hash_hex)
 
 
-def find_role(pin: str, state: AppState) -> Role | None:
+def find_role(pin: str, pins: list[PinCode]) -> Role | None:
     """Return the role bound to `pin`, or None if no stored hash matches."""
-    for entry in state.pins:
+    for entry in pins:
         if verify_pin(pin, entry.pin_hash):
             return entry.role
     return None
 
 
-def has_admin(state: AppState) -> bool:
-    return any(p.role == Role.ADMIN for p in state.pins)
+def has_admin(pins: list[PinCode]) -> bool:
+    return any(p.role == Role.ADMIN for p in pins)
 
 
 class SessionStore:

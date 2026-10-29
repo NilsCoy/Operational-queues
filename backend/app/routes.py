@@ -7,16 +7,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
+from . import db
 from .auth import bearer_token, find_role, hash_pin, require_role
 from .models import PinCode, Role, pin_public_view
-from .records import (
-    add_record,
-    delete_record,
-    group_by_week,
-    list_records,
-    update_record,
-)
-from .store import save_state
+from .records import group_by_week, week_end, week_start
 
 router = APIRouter(prefix="/api")
 
@@ -34,8 +28,9 @@ class LoginResponse(BaseModel):
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request) -> LoginResponse:
-    state = request.app.state.queue_state
-    role = find_role(payload.password, state)
+    conn = request.app.state.db
+    pins = await asyncio.to_thread(db.list_pins, conn)
+    role = find_role(payload.password, pins)
     if role is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
     token = request.app.state.sessions.create(role)
@@ -61,10 +56,6 @@ async def me(request: Request) -> dict:
     return {"role": role.value}
 
 
-async def _persist(request: Request) -> None:
-    await asyncio.to_thread(save_state, request.app.state.data_path, request.app.state.queue_state)
-
-
 class RecordCreate(BaseModel):
     day: date
     big_operations: str = ""
@@ -77,21 +68,30 @@ class RecordUpdate(BaseModel):
     small_operations: str | None = None
 
 
+async def _records_payload(request: Request, week_of: date | None, q: str | None) -> dict:
+    conn = request.app.state.db
+    start = week_start(week_of) if week_of is not None else None
+    end = week_end(week_of) if week_of is not None else None
+    records = await asyncio.to_thread(db.list_records, conn, start, end, q)
+    return {
+        "weeks": group_by_week(records),
+        "records": [r.model_dump(mode="json") for r in records],
+    }
+
+
 @router.get("/schedule")
 async def schedule(
     request: Request,
     week_of: Annotated[date | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
 ) -> dict:
-    """Public schedule (used by /user). `week_of` limits the result to that week,
-    `q` keeps only records whose big/small operations contain the keyword.
-    Without `week_of` the search covers all dates with records."""
-    state = request.app.state.queue_state
-    records = list_records(state, week_of, q)
-    return {
-        "weeks": group_by_week(records),
-        "records": [r.model_dump(mode="json") for r in records],
-    }
+    """Public schedule (used by /user).
+
+    `week_of` limits the result to that week, `q` keeps only records whose
+    big/small operations contain the keyword. Without `week_of` the search
+    covers all dates with records.
+    """
+    return await _records_payload(request, week_of, q)
 
 
 @router.get("/admin/records", dependencies=[Depends(ADMIN)])
@@ -100,50 +100,40 @@ async def read_records(
     week_of: Annotated[date | None, Query()] = None,
     q: Annotated[str | None, Query()] = None,
 ) -> dict:
-    state = request.app.state.queue_state
-    records = list_records(state, week_of, q)
-    return {
-        "weeks": group_by_week(records),
-        "records": [r.model_dump(mode="json") for r in records],
-    }
+    return await _records_payload(request, week_of, q)
 
 
 @router.post("/admin/records", dependencies=[Depends(ADMIN)])
 async def create_record(payload: RecordCreate, request: Request) -> dict:
-    async with request.app.state.lock:
-        record = add_record(
-            request.app.state.queue_state,
-            payload.day,
-            payload.big_operations,
-            payload.small_operations,
-        )
-        await _persist(request)
+    conn = request.app.state.db
+    record = await asyncio.to_thread(
+        db.add_record, conn, payload.day, payload.big_operations, payload.small_operations
+    )
     return record.model_dump(mode="json")
 
 
 @router.put("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
 async def edit_record(record_id: int, payload: RecordUpdate, request: Request) -> dict:
-    async with request.app.state.lock:
-        record = update_record(
-            request.app.state.queue_state,
-            record_id,
-            payload.day,
-            payload.big_operations,
-            payload.small_operations,
-        )
-        if record is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
-        await _persist(request)
+    conn = request.app.state.db
+    record = await asyncio.to_thread(
+        db.update_record,
+        conn,
+        record_id,
+        payload.day,
+        payload.big_operations,
+        payload.small_operations,
+    )
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
     return record.model_dump(mode="json")
 
 
 @router.delete("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
 async def remove_record(record_id: int, request: Request) -> dict:
-    async with request.app.state.lock:
-        deleted = delete_record(request.app.state.queue_state, record_id)
-        if not deleted:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
-        await _persist(request)
+    conn = request.app.state.db
+    deleted = await asyncio.to_thread(db.delete_record, conn, record_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="record not found")
     return {"deleted": True}
 
 
@@ -155,41 +145,51 @@ class PinCreate(BaseModel):
 
 @router.get("/admin/pins", dependencies=[Depends(ADMIN)])
 async def list_pins(request: Request) -> dict:
-    return {"pins": pin_public_view(request.app.state.queue_state)}
+    conn = request.app.state.db
+    pins = await asyncio.to_thread(db.list_pins, conn)
+    return {"pins": pin_public_view(pins)}
 
 
 @router.post("/admin/pins", dependencies=[Depends(ADMIN)])
 async def create_pin(payload: PinCreate, request: Request) -> dict:
-    state = request.app.state.queue_state
+    conn = request.app.state.db
     password = payload.password
     if len(password.strip()) < 4:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="password must be at least 4 characters",
         )
-    if find_role(password, state) is not None:
+    pins = await asyncio.to_thread(db.list_pins, conn)
+    if find_role(password, pins) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="password already in use")
-    async with request.app.state.lock:
-        state.pins.append(
-            PinCode(pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip())
-        )
-        await _persist(request)
-    return {"pins": pin_public_view(state)}
+    pin = PinCode(pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip())
+    await asyncio.to_thread(db.add_pin, conn, pin)
+    pins = await asyncio.to_thread(db.list_pins, conn)
+    return {"pins": pin_public_view(pins)}
 
 
 @router.delete("/admin/pins/{pin_index}", dependencies=[Depends(ADMIN)])
 async def delete_pin(pin_index: int, request: Request) -> dict:
     """Delete a PIN by its position in the list (values/hashes are never exposed)."""
-    state = request.app.state.queue_state
-    async with request.app.state.lock:
-        if pin_index < 0 or pin_index >= len(state.pins):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pin not found")
-        removed = state.pins.pop(pin_index)
-        if removed.role == Role.ADMIN and not any(p.role == Role.ADMIN for p in state.pins):
-            state.pins.insert(pin_index, removed)
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="cannot delete the last admin password",
-            )
-        await _persist(request)
-    return {"pins": pin_public_view(state)}
+    conn = request.app.state.db
+
+    def _delete() -> list[PinCode] | None:
+        pins = db.list_pins(conn)
+        if pin_index < 0 or pin_index >= len(pins):
+            return None
+        removed = pins[pin_index]
+        if removed.role == Role.ADMIN and sum(p.role == Role.ADMIN for p in pins) == 1:
+            raise ValueError("last admin")
+        db.delete_pin(conn, pin_index)
+        return db.list_pins(conn)
+
+    try:
+        pins = await asyncio.to_thread(_delete)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="cannot delete the last admin password",
+        ) from None
+    if pins is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pin not found")
+    return {"pins": pin_public_view(pins)}

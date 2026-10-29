@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class Role(StrEnum):
@@ -31,18 +31,10 @@ class PinCode(BaseModel):
     label: str = ""
 
 
-class AppState(BaseModel):
-    records: list[OperationRecord] = Field(default_factory=list)
-    next_record_id: int = 1
-    pins: list[PinCode] = Field(default_factory=list)
-
-
-def pin_public_view(state: AppState) -> list[dict]:
+def pin_public_view(pins: list[PinCode]) -> list[dict]:
     """PIN list for the admin UI. Hashes are never exposed."""
-    return [
-        {"role": p.role.value, "label": p.label, "hash_prefix": p.pin_hash[:12]} for p in state.pins
-    ]
+    return [{"role": p.role.value, "label": p.label, "hash_prefix": p.pin_hash[:12]} for p in pins]
 
 
-def has_role(state: AppState, role: Role) -> bool:
-    return any(p.role == role for p in state.pins)
+def has_role(pins: list[PinCode], role: Role) -> bool:
+    return any(p.role == role for p in pins)

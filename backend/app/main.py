@@ -7,21 +7,24 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import db
 from .auth import SessionStore, has_admin, hash_pin
 from .models import PinCode, Role
 from .routes import router
-from .store import load_state, save_state
+from .store import migrate_from_json
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DATA_PATH = BASE_DIR / "data" / "state.json"
+DEFAULT_DATA_PATH = BASE_DIR / "data" / "app.db"
+LEGACY_STATE_PATH = BASE_DIR / "data" / "state.json"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 
 def create_app(data_path: Path) -> FastAPI:
     app = FastAPI(title="Operational Queues")
-    app.state.data_path = data_path
-    app.state.queue_state = load_state(data_path)
-    app.state.lock = asyncio.Lock()
+    conn = db.init_db(data_path)
+    if LEGACY_STATE_PATH.exists():
+        migrate_from_json(conn, LEGACY_STATE_PATH)
+    app.state.db = conn
     app.state.sessions = SessionStore()
     app.include_router(router)
 
@@ -38,12 +41,14 @@ def create_app(data_path: Path) -> FastAPI:
 
     @app.get("/api/bootstrap")
     async def bootstrap_status(request: Request) -> dict:
-        return {"has_admin": has_admin(request.app.state.queue_state)}
+        pins = await asyncio.to_thread(db.list_pins, request.app.state.db)
+        return {"has_admin": has_admin(pins)}
 
     @app.post("/api/bootstrap/admin")
     async def bootstrap_admin(request: Request):
-        state = request.app.state.queue_state
-        if has_admin(state):
+        conn = request.app.state.db
+        pins = await asyncio.to_thread(db.list_pins, conn)
+        if has_admin(pins):
             return JSONResponse(status_code=409, content={"detail": "admin already exists"})
         body = await request.json()
         password = str(body.get("password", ""))
@@ -52,9 +57,8 @@ def create_app(data_path: Path) -> FastAPI:
                 status_code=400,
                 content={"detail": "password must be at least 4 characters"},
             )
-        async with request.app.state.lock:
-            state.pins.append(PinCode(pin_hash=hash_pin(password), role=Role.ADMIN, label="Admin"))
-            await asyncio.to_thread(save_state, app.state.data_path, state)
+        pin = PinCode(pin_hash=hash_pin(password), role=Role.ADMIN, label="Admin")
+        await asyncio.to_thread(db.add_pin, conn, pin)
         return {"has_admin": True}
 
     app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
