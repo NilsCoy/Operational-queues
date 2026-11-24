@@ -9,11 +9,11 @@ const CURRENT_CLASS = "-hit-current";
 const ROW_CLASS = "-row-hit";
 
 export function normalize(value) {
-  return String(value ?? "").toLocaleLowerCase("ru");
+  return String(value == null ? "" : value).toLocaleLowerCase("ru");
 }
 
 function escapeHtml(value) {
-  return String(value ?? "")
+  return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
@@ -187,7 +187,7 @@ export function mount({ root, container, bar }) {
   }
 
   function setQuery(value) {
-    query = String(value ?? "");
+    query = String(value == null ? "" : value);
     if (input) input.value = query;
     refresh();
   }
