@@ -509,7 +509,7 @@ a.btn-ghost:hover {
 
 .modal-card {
   width: 100%;
-  max-width: 500px;
+  max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
   background: var(--surface);

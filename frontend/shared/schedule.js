@@ -3,6 +3,7 @@
 // date cell merged (rowspan) so the week stays compact and readable.
 // Data cells carry data-col="big" / data-col="small" so the keyword search
 // (shared/search.js) can find and highlight them.
+// The "Записал" column shows who created the record and when (created_by, created_at).
 import { formatDay, weekdayLabel, startOfWeek, addDays, toIsoDate } from "./dates.js";
 
 export function escapeHtml(value) {
@@ -19,6 +20,21 @@ function cellHtml(value) {
   const text = value == null ? "" : String(value);
   if (!text.trim()) return '<span class="cell-empty">—</span>';
   return `<div class="cell-multiline">${escapeHtml(text)}</div>`;
+}
+
+// Formats an ISO timestamp as "дд.мм.гггг чч:мм" in local time.
+function formatStamp(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return escapeHtml(value);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Author and creation time cell: "кто создал, когда и во сколько".
+function authorHtml(record) {
+  const author = record.created_by ? escapeHtml(record.created_by) : "—";
+  return `<td class="row-author"><div class="cell-meta">${author}</div><div class="cell-meta">${escapeHtml(formatStamp(record.created_at))}</div></td>`;
 }
 
 // The backend returns { weeks: [...], records: [...] }. Either shape is accepted
@@ -72,7 +88,7 @@ export function renderWeeks(container, data, weekStartIso, options = {}) {
   // has records in chronological order instead of a fixed 7-day week.
   const multiDay = Boolean(options.allDates);
 
-  const headCells = ["День", "Большие операции", "Малые операции"];
+  const headCells = ["День", "Большие операции", "Малые операции", "Записал"];
   if (editable) headCells.push("Действия");
   const colCount = headCells.length;
 
@@ -95,6 +111,7 @@ export function renderWeeks(container, data, weekStartIso, options = {}) {
         }
         cells.push(`<td data-col="big" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.big_operations)}</td>`);
         cells.push(`<td data-col="small" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.small_operations)}</td>`);
+        cells.push(authorHtml(record));
         cells.push(recordActions(record, { editable }));
         const firstClass = index === 0 ? "day-row day-first" : "day-row";
         rows.push(`<tr class="${firstClass}" data-day="${escapeHtml(iso)}">${cells.join("")}</tr>`);
@@ -110,7 +127,7 @@ export function renderWeeks(container, data, weekStartIso, options = {}) {
       const dayLabel = dayLabelHtml(day);
 
       if (!dayRecords.length) {
-        const emptyCells = `<td data-col="big"><span class="cell-empty">—</span></td><td data-col="small"><span class="cell-empty">—</span></td>`;
+        const emptyCells = `<td data-col="big"><span class="cell-empty">—</span></td><td data-col="small"><span class="cell-empty">—</span></td><td class="row-author"></td>`;
         const actionCell = editable ? '<td class="row-actions"></td>' : "";
         rows.push(`<tr class="day-row day-empty">
         <td class="day-cell">${dayLabel}</td>${emptyCells}${actionCell}
@@ -127,6 +144,7 @@ export function renderWeeks(container, data, weekStartIso, options = {}) {
         }
         cells.push(`<td data-col="big" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.big_operations)}</td>`);
         cells.push(`<td data-col="small" data-record-id="${escapeHtml(record.id)}">${cellHtml(record.small_operations)}</td>`);
+        cells.push(authorHtml(record));
         cells.push(recordActions(record, { editable }));
         const firstClass = index === 0 ? "day-row day-first" : "day-row";
         rows.push(`<tr class="${firstClass}" data-day="${escapeHtml(iso)}">${cells.join("")}</tr>`);

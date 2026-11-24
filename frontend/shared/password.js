@@ -1,5 +1,6 @@
 // Change-password modal shared by the schedule page (/user) and the admin page (/admin).
-// Opened by the button, or forced when the password has expired (every 3 months): a forced modal cannot be closed until the password is changed.
+// Opened by the button, or forced when the password has expired (every 3 months):
+// a forced modal cannot be closed until the password is changed.
 import { api, getRole, clearSession } from "./api.js";
 
 const PASSWORD_HINT =
@@ -7,6 +8,8 @@ const PASSWORD_HINT =
 
 const EXPIRED_NOTE =
   "Срок действия пароля истёк (пароль меняется раз в 3 месяца). Смените пароль, чтобы продолжить.";
+
+let controller = null;
 
 // Mirrors backend/app/auth.py password_policy_error: 12+ chars, one uppercase, one special char.
 export function passwordPolicyError(password) {
@@ -23,7 +26,6 @@ function escapeAttr(value) {
 
 // Builds the modal once, appends it to <body> and wires it to `openButton`.
 // `onUnauthorized` is called when the session has expired.
-// Returns { open({ forced }) } so the page can show the modal after login when the password has expired.
 export function mountChangePassword({ openButton, onUnauthorized }) {
   const modal = document.createElement("div");
   modal.className = "modal";
@@ -133,5 +135,18 @@ export function mountChangePassword({ openButton, onUnauthorized }) {
     }
   });
 
-  return { open };
+  controller = { open };
+  return controller;
+}
+
+// Asks the backend whether the current password is older than 3 months.
+// If so, opens the change-password modal in forced mode.
+export async function enforcePasswordExpiry() {
+  if (!getRole() || !controller) return;
+  try {
+    const me = await api.me();
+    if (me.password_expired) controller.open({ forced: true });
+  } catch {
+    // session problems are handled by the page's own 401 handling
+  }
 }

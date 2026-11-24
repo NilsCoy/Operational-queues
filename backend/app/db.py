@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -37,9 +38,32 @@ MIGRATIONS = [
     ("pins", "changed_at", "TEXT NOT NULL DEFAULT ''"),
 ]
 
+_STAMP_RE = re.compile(
+    r"^\s*(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?\s*$"
+)
+
 
 def now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def parse_stamp(value: str | None) -> datetime | None:
+    """Parse a stored timestamp. Accepts missing zero-padding, e.g. 2026-5-24T11:25:40.
+
+    Returns None when the value is empty or cannot be read.
+    """
+    if not value:
+        return None
+    match = _STAMP_RE.match(value)
+    if match is None:
+        return None
+    year, month, day, hour, minute, second = match.groups()
+    try:
+        return datetime(
+            int(year), int(month), int(day), int(hour), int(minute), int(second or 0)
+        )
+    except ValueError:
+        return None
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -51,6 +75,28 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _normalize_stamps(conn: sqlite3.Connection) -> None:
+    """Rewrite readable but non-canonical timestamps in pins and records to ISO form."""
+    stamp = now_iso()
+    for row in conn.execute("SELECT id, created_at, changed_at FROM pins").fetchall():
+        created = parse_stamp(row["created_at"])
+        changed = parse_stamp(row["changed_at"])
+        new_created = created.isoformat(timespec="seconds") if created else stamp
+        new_changed = changed.isoformat(timespec="seconds") if changed else new_created
+        if (new_created, new_changed) != (row["created_at"], row["changed_at"]):
+            conn.execute(
+                "UPDATE pins SET created_at = ?, changed_at = ? WHERE id = ?",
+                (new_created, new_changed, row["id"]),
+            )
+    for row in conn.execute("SELECT id, created_at FROM records").fetchall():
+        parsed = parse_stamp(row["created_at"])
+        if parsed is not None and parsed.isoformat(timespec="seconds") != row["created_at"]:
+            conn.execute(
+                "UPDATE records SET created_at = ? WHERE id = ?",
+                (parsed.isoformat(timespec="seconds"), row["id"]),
+            )
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     for table, column, definition in MIGRATIONS:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
@@ -60,6 +106,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     stamp = now_iso()
     conn.execute("UPDATE pins SET created_at = ? WHERE created_at = ''", (stamp,))
     conn.execute("UPDATE pins SET changed_at = created_at WHERE changed_at = ''")
+    # Fix timestamps written without zero-padding by earlier versions.
+    _normalize_stamps(conn)
+    # Role "user" was renamed to "reader" (Читатель).
+    conn.execute("UPDATE pins SET role = 'reader' WHERE role = 'user'")
 
 
 def init_db(db_path: Path) -> sqlite3.Connection:

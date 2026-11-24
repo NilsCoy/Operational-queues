@@ -2,7 +2,7 @@
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { renderWeeks } from "../shared/schedule.js";
 import { mount } from "../shared/search.js";
-import { mountChangePassword } from "../shared/password.js";
+import { mountChangePassword, enforcePasswordExpiry } from "../shared/password.js";
 import {
   formatWeekRange,
   startOfWeek,
@@ -142,10 +142,11 @@ loginForm.addEventListener("submit", async (event) => {
   showLoginError("");
   try {
     const data = await api.login(loginPassword.value);
-    setSession(data.token, data.role || "user");
+    setSession(data.token, data.role || "reader");
     loginPassword.value = "";
     refreshSessionUi();
     loadWeek();
+    enforcePasswordExpiry();
   } catch (err) {
     showLoginError(err.message || "Неверный пароль");
   }
@@ -168,4 +169,7 @@ if (changePasswordBtn) {
 mountBar();
 refreshSessionUi();
 refreshWeekUi();
-if (getRole()) loadWeek();
+if (getRole()) {
+  loadWeek();
+  enforcePasswordExpiry();
+}

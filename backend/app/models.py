@@ -9,7 +9,7 @@ from pydantic import BaseModel
 class Role(StrEnum):
     ADMIN = "admin"
     EDITOR = "editor"
-    USER = "user"
+    USER = "reader"
 
 
 class OperationRecord(BaseModel):

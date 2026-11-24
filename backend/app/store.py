@@ -10,10 +10,20 @@ from pydantic import BaseModel, Field, ValidationError
 from . import db
 from .models import OperationRecord, PinCode
 
+# Roles renamed between versions: legacy value -> current value.
+LEGACY_ROLE_MAP = {"user": "reader"}
+
 
 class _LegacyState(BaseModel):
     records: list[OperationRecord] = Field(default_factory=list)
     pins: list[PinCode] = Field(default_factory=list)
+
+
+def _map_legacy_roles(raw: dict) -> dict:
+    for pin in raw.get("pins", []) or []:
+        if isinstance(pin, dict) and pin.get("role") in LEGACY_ROLE_MAP:
+            pin["role"] = LEGACY_ROLE_MAP[pin["role"]]
+    return raw
 
 
 def migrate_from_json(conn: sqlite3.Connection, json_path: Path) -> bool:
@@ -25,7 +35,8 @@ def migrate_from_json(conn: sqlite3.Connection, json_path: Path) -> bool:
     if not json_path.exists():
         return False
     try:
-        state = _LegacyState.model_validate(json.loads(json_path.read_text(encoding="utf-8")))
+        raw = json.loads(json_path.read_text(encoding="utf-8"))
+        state = _LegacyState.model_validate(_map_legacy_roles(raw))
     except (json.JSONDecodeError, ValidationError, OSError):
         json_path.rename(json_path.with_suffix(f"{json_path.suffix}.corrupt-{int(time.time())}"))
         return False

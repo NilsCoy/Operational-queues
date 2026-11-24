@@ -4,7 +4,7 @@ import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { formatWeekRange, startOfWeek, addWeeks, toIsoDate, parseIsoDate } from "../shared/dates.js";
 import { renderWeeks, escapeHtml } from "../shared/schedule.js";
 import { mount as create } from "../shared/search.js";
-import { mountChangePassword, passwordPolicyError } from "../shared/password.js";
+import { mountChangePassword, passwordPolicyError, enforcePasswordExpiry } from "../shared/password.js";
 
 const setupSection = document.getElementById("setup");
 const setupForm = document.getElementById("setup-form");
@@ -56,7 +56,7 @@ const pinError = document.getElementById("pin-error");
 const ROLE_LABELS = {
   admin: "Администратор",
   editor: "Редактор",
-  user: "Пользователь",
+  reader: "Читатель",
 };
 
 let currentWeek = startOfWeek(new Date());
@@ -269,6 +269,7 @@ async function boot() {
   const role = getRole();
   if (role === "admin" || role === "editor") {
     enterApp();
+    enforcePasswordExpiry();
     return;
   }
   try {
@@ -330,6 +331,7 @@ loginForm.addEventListener("submit", async (event) => {
     setSession(token, role);
     loginPassword.value = "";
     enterApp();
+    enforcePasswordExpiry();
   } catch (err) {
     showError(loginError, err.status === 401 ? "Неверный пароль" : err.message);
   }

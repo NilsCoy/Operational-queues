@@ -12,6 +12,7 @@ from datetime import datetime
 
 from fastapi import HTTPException, Request, status
 
+from .db import parse_stamp
 from .models import PinCode, Role
 
 PBKDF2_ITERATIONS = 120_000
@@ -58,10 +59,14 @@ def generate_password(length: int = 14) -> str:
 
 
 def password_expired(changed_at: str, now: datetime | None = None) -> bool:
-    """True when the password was last changed PASSWORD_MAX_AGE_MONTHS or more ago."""
-    if not changed_at:
+    """True when the password was last changed PASSWORD_MAX_AGE_MONTHS or more ago.
+
+    A missing or unreadable timestamp counts as expired, so the user is asked to
+    set a new password instead of the login request failing.
+    """
+    changed = parse_stamp(changed_at)
+    if changed is None:
         return True
-    changed = datetime.fromisoformat(changed_at)
     now = now or datetime.now()
     month_index = changed.month - 1 + PASSWORD_MAX_AGE_MONTHS
     year = changed.year + month_index // 12
