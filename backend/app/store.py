@@ -36,14 +36,18 @@ def migrate_from_json(conn: sqlite3.Connection, json_path: Path) -> bool:
 
     for record in state.records:
         conn.execute(
-            "INSERT INTO records (day, big_operations, small_operations) VALUES (?, ?, ?)",
-            (record.day.isoformat(), record.big_operations, record.small_operations),
+            "INSERT INTO records (day, big_operations, small_operations, created_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                record.day.isoformat(),
+                record.big_operations,
+                record.small_operations,
+                "",
+                db.now_iso(),
+            ),
         )
     for pin in state.pins:
-        conn.execute(
-            "INSERT INTO pins (pin_hash, role, label) VALUES (?, ?, ?)",
-            (pin.pin_hash, pin.role.value, pin.label),
-        )
+        db.add_pin(conn, pin)
     conn.commit()
     json_path.rename(json_path.with_suffix(f"{json_path.suffix}.migrated-{int(time.time())}"))
     return True

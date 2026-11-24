@@ -12,12 +12,13 @@
     <div class="topbar-actions">
       <a href="/user" class="btn btn-ghost">Расписание</a>
       <button type="button" id="pins-open" class="btn btn-ghost" hidden>Пароли доступа</button>
+      <button type="button" id="change-password-open" class="btn btn-ghost" hidden>Сменить пароль</button>
       <button type="button" id="logout" class="btn btn-ghost" hidden>Выйти</button>
     </div>
   </header>
 
   <main class="page">
-    <!-- Admin content: hidden until an authorized admin is logged in. -->
+    <!-- Admin content: visible to admin and editor after login. -->
     <section id="app" hidden>
       <div class="panel">
         <h2 id="record-form-title">Добавить запись</h2>
@@ -69,10 +70,10 @@
       <!-- First run only: no admin exists yet. -->
       <section id="setup" class="auth-panel" hidden>
         <h2>Первый запуск</h2>
-        <p class="modal-hint">Создайте пароль администратора. Стандартных паролей нет.</p>
+        <p class="modal-hint">Создайте пароль администратора: минимум 12 символов, хотя бы одна заглавная буква и один специальный символ. Пробелы разрешены.</p>
         <form id="setup-form" class="form-column" hidden>
-          <label>Пароль<input type="password" id="setup-password" minlength="4" autocomplete="new-password" required></label>
-          <label>Повторите пароль<input type="password" id="setup-password-2" minlength="4" autocomplete="new-password" required></label>
+          <label>Пароль<input type="password" id="setup-password" minlength="12" autocomplete="new-password" required></label>
+          <label>Повторите пароль<input type="password" id="setup-password-2" minlength="12" autocomplete="new-password" required></label>
           <button type="submit" class="btn">Создать администратора</button>
         </form>
         <p class="form-error" id="setup-error" hidden></p>
@@ -80,8 +81,8 @@
 
       <!-- Shown only when an admin already exists. -->
       <section id="login-auth" class="auth-panel" hidden>
-        <h2>Вход администратора</h2>
-        <p class="modal-hint">Введите пароль администратора.</p>
+        <h2>Вход</h2>
+        <p class="modal-hint">Введите пароль администратора или редактора.</p>
         <form id="login-form" class="form-column">
           <label>Пароль<input type="password" id="login-password" autocomplete="current-password" required></label>
           <button type="submit" class="btn">Войти</button>
@@ -94,13 +95,14 @@
   <div class="modal" id="pins-modal" hidden>
     <div class="modal-card">
       <h2>Пароли доступа</h2>
-      <p class="modal-hint">Пароль показывается один раз при создании — сохраните его.</p>
+      <p class="modal-hint">Оставьте пароль пустым — он будет сгенерирован. Показывается один раз, сохраните его.</p>
       <form id="pin-form" class="form-column">
-        <label>Пароль<input type="password" id="pin-value" minlength="4" autocomplete="new-password" required placeholder="Пароль"></label>
+        <label>Пароль<input type="password" id="pin-value" autocomplete="new-password" placeholder="Пусто = сгенерировать"></label>
         <label>Подпись<input type="text" id="pin-label" placeholder="Кому выдан"></label>
         <label>Роль
           <select id="pin-role" class="pin-role">
-            <option value="user">Пользователь</option>
+            <option value="user">Читатель</option>
+            <option value="editor">Редактор</option>
             <option value="admin">Администратор</option>
           </select>
         </label>

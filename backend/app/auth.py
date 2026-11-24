@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import calendar
 import hashlib
 import hmac
+import random
 import secrets
+import string
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 
 from fastapi import HTTPException, Request, status
 
@@ -11,6 +16,59 @@ from .models import PinCode, Role
 
 PBKDF2_ITERATIONS = 120_000
 PBKDF2_ALGO = "sha256"
+
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_SPECIALS = "!@#$%^&*()-_=+[]{};:,.?/\\|~"
+PASSWORD_MAX_AGE_MONTHS = 3
+
+
+def password_policy_error(password: str) -> str | None:
+    """Return a human-readable reason if `password` breaks the policy, else None.
+
+    Rules: at least 12 characters, at least one uppercase letter and at least
+    one special character (anything that is not a letter, digit or space).
+    Spaces are allowed anywhere in the password.
+    """
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return f"пароль должен содержать минимум {PASSWORD_MIN_LENGTH} символов"
+    if not any(ch.isupper() for ch in password):
+        return "пароль должен содержать хотя бы одну заглавную букву"
+    if not any(not ch.isalnum() and not ch.isspace() for ch in password):
+        return "пароль должен содержать хотя бы один специальный символ"
+    return None
+
+
+def generate_password(length: int = 14) -> str:
+    """Random password that always satisfies `password_policy_error`."""
+    length = max(length, PASSWORD_MIN_LENGTH)
+    alphabet = string.ascii_letters + string.digits + PASSWORD_SPECIALS
+    rng = random.SystemRandom()
+    while True:
+        chars = [
+            secrets.choice(string.ascii_uppercase),
+            secrets.choice(string.ascii_lowercase),
+            secrets.choice(string.digits),
+            secrets.choice(PASSWORD_SPECIALS),
+        ]
+        chars += [secrets.choice(alphabet) for _ in range(length - len(chars))]
+        rng.shuffle(chars)
+        candidate = "".join(chars)
+        if password_policy_error(candidate) is None:
+            return candidate
+
+
+def password_expired(changed_at: str, now: datetime | None = None) -> bool:
+    """True when the password was last changed PASSWORD_MAX_AGE_MONTHS or more ago."""
+    if not changed_at:
+        return True
+    changed = datetime.fromisoformat(changed_at)
+    now = now or datetime.now()
+    month_index = changed.month - 1 + PASSWORD_MAX_AGE_MONTHS
+    year = changed.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(changed.day, calendar.monthrange(year, month)[1])
+    due = changed.replace(year=year, month=month, day=day)
+    return now >= due
 
 
 def hash_pin(pin: str) -> str:
@@ -40,11 +98,11 @@ def verify_pin(pin: str, stored: str) -> bool:
     return hmac.compare_digest(digest.hex(), hash_hex)
 
 
-def find_role(pin: str, pins: list[PinCode]) -> Role | None:
-    """Return the role bound to `pin`, or None if no stored hash matches."""
+def find_pin(pin: str, pins: list[PinCode]) -> PinCode | None:
+    """Return the stored entry whose password matches `pin`, or None."""
     for entry in pins:
         if verify_pin(pin, entry.pin_hash):
-            return entry.role
+            return entry
     return None
 
 
@@ -52,26 +110,30 @@ def has_admin(pins: list[PinCode]) -> bool:
     return any(p.role == Role.ADMIN for p in pins)
 
 
+@dataclass(frozen=True)
+class Session:
+    role: Role
+    pin_id: int
+
+
 class SessionStore:
     def __init__(self) -> None:
-        self._tokens: dict[str, Role] = {}
+        self._tokens: dict[str, Session] = {}
 
-    def create(self, role: Role) -> str:
+    def create(self, role: Role, pin_id: int) -> str:
         token = secrets.token_urlsafe(24)
-        self._tokens[token] = role
+        self._tokens[token] = Session(role=role, pin_id=pin_id)
         return token
 
-    def role_for(self, token: str) -> Role | None:
+    def get(self, token: str) -> Session | None:
         return self._tokens.get(token)
-
-    def is_valid(self, token: str, role: Role) -> bool:
-        return self._tokens.get(token) == role
 
     def revoke(self, token: str) -> None:
         self._tokens.pop(token, None)
 
-    def revoke_role(self, role: Role) -> None:
-        for token in [t for t, r in self._tokens.items() if r == role]:
+    def revoke_pin(self, pin_id: int) -> None:
+        """Drop every session opened with the given password (e.g. after deletion)."""
+        for token in [t for t, s in self._tokens.items() if s.pin_id == pin_id]:
             del self._tokens[token]
 
 
@@ -80,26 +142,22 @@ def bearer_token(request: Request) -> str:
     return header.removeprefix("Bearer ").strip()
 
 
-def require_role(role: Role) -> Callable:
+def require_roles(*roles: Role) -> Callable:
+    """Dependency: 401 without a valid session, 403 if the role is not allowed."""
+
     async def dependency(request: Request) -> None:
         token = bearer_token(request)
         sessions: SessionStore = request.app.state.sessions
-        if not token or not sessions.is_valid(token, role):
+        session = sessions.get(token) if token else None
+        if session is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="invalid or missing session",
             )
+        if session.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="forbidden for this role",
+            )
 
     return dependency
-
-
-async def require_any(request: Request) -> Role:
-    token = bearer_token(request)
-    sessions: SessionStore = request.app.state.sessions
-    role = sessions.role_for(token) if token else None
-    if role is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid or missing session",
-        )
-    return role

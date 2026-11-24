@@ -69,6 +69,8 @@ export const api = {
   login: (password) => request("POST", "/login", { password }),
   logout: () => request("POST", "/logout"),
   me: () => request("GET", "/me"),
+  changePassword: (currentPassword, newPassword) =>
+    request("POST", "/password", { current_password: currentPassword, new_password: newPassword }),
 
   schedule: (weekOf, q) => request("GET", `/schedule${weekQuery(weekOf, q)}`),
 

@@ -8,13 +8,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 from . import db
-from .auth import bearer_token, find_role, hash_pin, require_role
+from .auth import (
+    bearer_token,
+    find_pin,
+    generate_password,
+    hash_pin,
+    password_expired,
+    password_policy_error,
+    require_roles,
+    verify_pin,
+)
 from .models import PinCode, Role, pin_public_view
 from .records import group_by_week, week_end, week_start
 
 router = APIRouter(prefix="/api")
 
-ADMIN = require_role(Role.ADMIN)
+# Admin: everything. Editor: admin panel and journal records, but no access passwords.
+ADMIN = require_roles(Role.ADMIN)
+STAFF = require_roles(Role.ADMIN, Role.EDITOR)
 
 
 class LoginRequest(BaseModel):
@@ -24,17 +35,22 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     role: Role
+    password_expired: bool = False
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(payload: LoginRequest, request: Request) -> LoginResponse:
     conn = request.app.state.db
     pins = await asyncio.to_thread(db.list_pins, conn)
-    role = find_role(payload.password, pins)
-    if role is None:
+    pin = find_pin(payload.password, pins)
+    if pin is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
-    token = request.app.state.sessions.create(role)
-    return LoginResponse(token=token, role=role)
+    token = request.app.state.sessions.create(pin.role, pin.id)
+    return LoginResponse(
+        token=token,
+        role=pin.role,
+        password_expired=password_expired(pin.changed_at),
+    )
 
 
 @router.post("/logout")
@@ -45,15 +61,58 @@ async def logout(request: Request) -> dict:
     return {"loggedOut": True}
 
 
-@router.get("/me")
-async def me(request: Request) -> dict:
+async def _current_pin(request: Request) -> PinCode:
+    """The password behind the current session; 401 if the session is missing or stale."""
     token = bearer_token(request)
-    role = request.app.state.sessions.role_for(token) if token else None
-    if role is None:
+    session = request.app.state.sessions.get(token) if token else None
+    if session is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or missing session"
         )
-    return {"role": role.value}
+    pins = await asyncio.to_thread(db.list_pins, request.app.state.db)
+    pin = next((p for p in pins if p.id == session.pin_id), None)
+    if pin is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or missing session"
+        )
+    return pin
+
+
+@router.get("/me")
+async def me(request: Request) -> dict:
+    pin = await _current_pin(request)
+    return {
+        "role": pin.role.value,
+        "password_expired": password_expired(pin.changed_at),
+    }
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/password")
+async def change_password(payload: PasswordChange, request: Request) -> dict:
+    """Change the password of the current session (any role)."""
+    pin = await _current_pin(request)
+    conn = request.app.state.db
+    if not verify_pin(payload.current_password, pin.pin_hash):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="текущий пароль неверен")
+    error = password_policy_error(payload.new_password)
+    if error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    if payload.new_password == payload.current_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="новый пароль должен отличаться от текущего",
+        )
+    pins = await asyncio.to_thread(db.list_pins, conn)
+    if find_pin(payload.new_password, pins) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="password already in use")
+    # update_pin_hash also stamps changed_at, which restarts the 3-month countdown.
+    await asyncio.to_thread(db.update_pin_hash, conn, pin.id, hash_pin(payload.new_password))
+    return {"changed": True, "password_expired": False}
 
 
 class RecordCreate(BaseModel):
@@ -94,7 +153,7 @@ async def schedule(
     return await _records_payload(request, week_of, q)
 
 
-@router.get("/admin/records", dependencies=[Depends(ADMIN)])
+@router.get("/admin/records", dependencies=[Depends(STAFF)])
 async def read_records(
     request: Request,
     week_of: Annotated[date | None, Query()] = None,
@@ -103,16 +162,28 @@ async def read_records(
     return await _records_payload(request, week_of, q)
 
 
-@router.post("/admin/records", dependencies=[Depends(ADMIN)])
+@router.post("/admin/records", dependencies=[Depends(STAFF)])
 async def create_record(payload: RecordCreate, request: Request) -> dict:
+    # A journal entry needs at least one filled operations field.
+    if not payload.big_operations.strip() and not payload.small_operations.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="заполните хотя бы одно поле: крупные или мелкие операции",
+        )
+    pin = await _current_pin(request)
     conn = request.app.state.db
     record = await asyncio.to_thread(
-        db.add_record, conn, payload.day, payload.big_operations, payload.small_operations
+        db.add_record,
+        conn,
+        payload.day,
+        payload.big_operations,
+        payload.small_operations,
+        pin.label or pin.role.value,
     )
     return record.model_dump(mode="json")
 
 
-@router.put("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
+@router.put("/admin/records/{record_id}", dependencies=[Depends(STAFF)])
 async def edit_record(record_id: int, payload: RecordUpdate, request: Request) -> dict:
     conn = request.app.state.db
     record = await asyncio.to_thread(
@@ -128,7 +199,7 @@ async def edit_record(record_id: int, payload: RecordUpdate, request: Request) -
     return record.model_dump(mode="json")
 
 
-@router.delete("/admin/records/{record_id}", dependencies=[Depends(ADMIN)])
+@router.delete("/admin/records/{record_id}", dependencies=[Depends(STAFF)])
 async def remove_record(record_id: int, request: Request) -> dict:
     conn = request.app.state.db
     deleted = await asyncio.to_thread(db.delete_record, conn, record_id)
@@ -138,7 +209,8 @@ async def remove_record(record_id: int, request: Request) -> dict:
 
 
 class PinCreate(BaseModel):
-    password: str = Field(min_length=4, max_length=128)
+    # Empty password -> the server generates one and returns it once.
+    password: str = Field(default="", max_length=128)
     role: Role = Role.USER
     label: str = ""
 
@@ -154,26 +226,32 @@ async def list_pins(request: Request) -> dict:
 async def create_pin(payload: PinCreate, request: Request) -> dict:
     conn = request.app.state.db
     password = payload.password
-    if len(password.strip()) < 4:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="password must be at least 4 characters",
-        )
+    generated: str | None = None
+    if password:
+        error = password_policy_error(password)
+        if error:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
+    else:
+        generated = generate_password()
+        password = generated
     pins = await asyncio.to_thread(db.list_pins, conn)
-    if find_role(password, pins) is not None:
+    if find_pin(password, pins) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="password already in use")
     pin = PinCode(pin_hash=hash_pin(password), role=payload.role, label=payload.label.strip())
     await asyncio.to_thread(db.add_pin, conn, pin)
     pins = await asyncio.to_thread(db.list_pins, conn)
-    return {"pins": pin_public_view(pins)}
+    result: dict = {"pins": pin_public_view(pins)}
+    if generated is not None:
+        result["generated_password"] = generated
+    return result
 
 
 @router.delete("/admin/pins/{pin_index}", dependencies=[Depends(ADMIN)])
 async def delete_pin(pin_index: int, request: Request) -> dict:
-    """Delete a PIN by its position in the list (values/hashes are never exposed)."""
+    """Delete a password by its position in the list (values/hashes are never exposed)."""
     conn = request.app.state.db
 
-    def _delete() -> list[PinCode] | None:
+    def _delete() -> tuple[int, list[PinCode]] | None:
         pins = db.list_pins(conn)
         if pin_index < 0 or pin_index >= len(pins):
             return None
@@ -181,15 +259,17 @@ async def delete_pin(pin_index: int, request: Request) -> dict:
         if removed.role == Role.ADMIN and sum(p.role == Role.ADMIN for p in pins) == 1:
             raise ValueError("last admin")
         db.delete_pin(conn, pin_index)
-        return db.list_pins(conn)
+        return removed.id, db.list_pins(conn)
 
     try:
-        pins = await asyncio.to_thread(_delete)
+        result = await asyncio.to_thread(_delete)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="cannot delete the last admin password",
         ) from None
-    if pins is None:
+    if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="pin not found")
+    removed_id, pins = result
+    request.app.state.sessions.revoke_pin(removed_id)
     return {"pins": pin_public_view(pins)}

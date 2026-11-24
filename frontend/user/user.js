@@ -2,6 +2,7 @@
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { renderWeeks } from "../shared/schedule.js";
 import { mount } from "../shared/search.js";
+import { mountChangePassword } from "../shared/password.js";
 import {
   formatWeekRange,
   startOfWeek,
@@ -24,6 +25,7 @@ const loginError = document.querySelector("#login-error");
 const loginForm = document.querySelector("#login-form");
 const logoutBtn = document.querySelector("#logout");
 const adminLink = document.querySelector("#admin-link");
+const changePasswordBtn = document.querySelector("#change-password-open");
 
 let currentWeek = startOfWeek(new Date());
 let loadSeq = 0;
@@ -43,12 +45,14 @@ function onUnauthorized() {
 function refreshSessionUi() {
   const role = getRole();
   const loggedIn = Boolean(role);
-  const isAdmin = role === "admin";
+  // Editors also get the admin panel link (journal access); only admin manages passwords there.
+  const canOpenAdmin = role === "admin" || role === "editor";
 
   loginModal.hidden = loggedIn;
   appSection.hidden = !loggedIn;
   logoutBtn.hidden = !loggedIn;
-  if (adminLink) adminLink.hidden = !isAdmin;
+  if (changePasswordBtn) changePasswordBtn.hidden = !loggedIn;
+  if (adminLink) adminLink.hidden = !canOpenAdmin;
 
   document.body.classList.toggle("is-guest", !loggedIn);
   if (!loggedIn) {
@@ -121,7 +125,7 @@ nextWeekBtn.addEventListener("click", () => {
   loadWeek();
 });
 todayBtn.addEventListener("click", () => {
-  currentWeek = startOfWeek(parseIsoDate(todayIso()));
+  currentWeek = startOfWeek(new Date());
   loadWeek();
 });
 if (jumpDay) {
@@ -147,10 +151,19 @@ loginForm.addEventListener("submit", async (event) => {
   }
 });
 
-logoutBtn.addEventListener("click", () => {
+logoutBtn.addEventListener("click", async () => {
+  try {
+    await api.logout();
+  } catch {
+    // token may already be invalid
+  }
   clearSession();
   refreshSessionUi();
 });
+
+if (changePasswordBtn) {
+  mountChangePassword({ openButton: changePasswordBtn, onUnauthorized });
+}
 
 mountBar();
 refreshSessionUi();

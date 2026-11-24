@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from .models import OperationRecord, PinCode, Role
@@ -11,18 +11,35 @@ CREATE TABLE IF NOT EXISTS records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     day TEXT NOT NULL,
     big_operations TEXT NOT NULL DEFAULT '',
-    small_operations TEXT NOT NULL DEFAULT ''
+    small_operations TEXT NOT NULL DEFAULT '',
+    created_by TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS pins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pin_hash TEXT NOT NULL,
     role TEXT NOT NULL,
-    label TEXT NOT NULL DEFAULT ''
+    label TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT '',
+    changed_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_records_day ON records (day);
 """
+
+# Columns added after the first release: (table, column, definition).
+# CREATE TABLE IF NOT EXISTS does not add them to an existing database.
+MIGRATIONS = [
+    ("records", "created_by", "TEXT NOT NULL DEFAULT ''"),
+    ("records", "created_at", "TEXT NOT NULL DEFAULT ''"),
+    ("pins", "created_at", "TEXT NOT NULL DEFAULT ''"),
+    ("pins", "changed_at", "TEXT NOT NULL DEFAULT ''"),
+]
+
+
+def now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -34,9 +51,21 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, definition in MIGRATIONS:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+    # Pins that existed before timestamps were added count as created and changed now.
+    stamp = now_iso()
+    conn.execute("UPDATE pins SET created_at = ? WHERE created_at = ''", (stamp,))
+    conn.execute("UPDATE pins SET changed_at = created_at WHERE changed_at = ''")
+
+
 def init_db(db_path: Path) -> sqlite3.Connection:
     conn = connect(db_path)
     conn.executescript(SCHEMA)
+    _migrate(conn)
     conn.commit()
     return conn
 
@@ -47,11 +76,20 @@ def _row_to_record(row: sqlite3.Row) -> OperationRecord:
         day=date.fromisoformat(row["day"]),
         big_operations=row["big_operations"],
         small_operations=row["small_operations"],
+        created_by=row["created_by"],
+        created_at=row["created_at"],
     )
 
 
 def _row_to_pin(row: sqlite3.Row) -> PinCode:
-    return PinCode(pin_hash=row["pin_hash"], role=Role(row["role"]), label=row["label"])
+    return PinCode(
+        id=row["id"],
+        pin_hash=row["pin_hash"],
+        role=Role(row["role"]),
+        label=row["label"],
+        created_at=row["created_at"],
+        changed_at=row["changed_at"],
+    )
 
 
 # --- records ---------------------------------------------------------------
@@ -90,11 +128,16 @@ def get_record(conn: sqlite3.Connection, record_id: int) -> OperationRecord | No
 
 
 def add_record(
-    conn: sqlite3.Connection, day: date, big_operations: str = "", small_operations: str = ""
+    conn: sqlite3.Connection,
+    day: date,
+    big_operations: str = "",
+    small_operations: str = "",
+    created_by: str = "",
 ) -> OperationRecord:
     cur = conn.execute(
-        "INSERT INTO records (day, big_operations, small_operations) VALUES (?, ?, ?)",
-        (day.isoformat(), big_operations, small_operations),
+        "INSERT INTO records (day, big_operations, small_operations, created_by, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (day.isoformat(), big_operations, small_operations, created_by, now_iso()),
     )
     conn.commit()
     record = get_record(conn, int(cur.lastrowid))
@@ -139,9 +182,19 @@ def list_pins(conn: sqlite3.Connection) -> list[PinCode]:
 
 
 def add_pin(conn: sqlite3.Connection, pin: PinCode) -> None:
+    # A new password counts as created and changed at the same moment.
+    stamp = now_iso()
     conn.execute(
-        "INSERT INTO pins (pin_hash, role, label) VALUES (?, ?, ?)",
-        (pin.pin_hash, pin.role.value, pin.label),
+        "INSERT INTO pins (pin_hash, role, label, created_at, changed_at) VALUES (?, ?, ?, ?, ?)",
+        (pin.pin_hash, pin.role.value, pin.label, stamp, stamp),
+    )
+    conn.commit()
+
+
+def update_pin_hash(conn: sqlite3.Connection, pin_id: int, pin_hash: str) -> None:
+    conn.execute(
+        "UPDATE pins SET pin_hash = ?, changed_at = ? WHERE id = ?",
+        (pin_hash, now_iso(), pin_id),
     )
     conn.commit()
 

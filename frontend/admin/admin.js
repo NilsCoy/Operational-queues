@@ -1,8 +1,10 @@
 // Admin page: create/read/update/delete records grouped by week, and manage access passwords.
+// Admin and editor can open this page and write journal records; only admin manages passwords.
 import { api, getRole, setSession, clearSession } from "../shared/api.js";
 import { formatWeekRange, startOfWeek, addWeeks, toIsoDate, parseIsoDate } from "../shared/dates.js";
 import { renderWeeks, escapeHtml } from "../shared/schedule.js";
 import { mount as create } from "../shared/search.js";
+import { mountChangePassword, passwordPolicyError } from "../shared/password.js";
 
 const setupSection = document.getElementById("setup");
 const setupForm = document.getElementById("setup-form");
@@ -18,6 +20,7 @@ const loginError = document.getElementById("login-error");
 const loginModal = document.getElementById("login-modal");
 const appSection = document.getElementById("app");
 const logoutBtn = document.getElementById("logout");
+const changePasswordBtn = document.getElementById("change-password-open");
 
 const weekLabel = document.getElementById("week-label");
 const prevWeek = document.getElementById("prev-week");
@@ -49,6 +52,12 @@ const pinRole = document.getElementById("pin-role");
 const pinList = document.getElementById("pin-list");
 const pinCreated = document.getElementById("pin-created");
 const pinError = document.getElementById("pin-error");
+
+const ROLE_LABELS = {
+  admin: "Администратор",
+  editor: "Редактор",
+  user: "Пользователь",
+};
 
 let currentWeek = startOfWeek(new Date());
 let hasAdmin = false;
@@ -103,15 +112,18 @@ function closePinsModal() {
 }
 
 // Logged out: the whole inner content is hidden and the auth modal cannot be closed.
-// Only an authorized admin sees the main admin content and its buttons.
+// Admin and editor see the admin content; the "Пароли доступа" button is admin-only.
 function renderSessionUi() {
   const role = getRole();
   const loggedIn = Boolean(role);
   const isAdmin = role === "admin";
-  appSection.hidden = !isAdmin;
+  const isStaff = isAdmin || role === "editor";
+  appSection.hidden = !isStaff;
   pinsOpen.hidden = !isAdmin;
+  if (changePasswordBtn) changePasswordBtn.hidden = !loggedIn;
   logoutBtn.hidden = !loggedIn;
   document.body.classList.toggle("is-admin", isAdmin);
+  document.body.classList.toggle("is-editor", role === "editor");
   document.body.classList.toggle("is-guest", !loggedIn);
   if (!isAdmin) closePinsModal();
   if (!loggedIn) {
@@ -198,7 +210,7 @@ function renderPins(pins) {
   pinList.innerHTML = pins
     .map(
       (p, index) => `<tr>
-        <td><span class="pin-role-badge pin-role-${escapeHtml(p.role)}">${p.role === "admin" ? "Администратор" : "Пользователь"}</span></td>
+        <td><span class="pin-role-badge pin-role-${escapeHtml(p.role)}">${escapeHtml(ROLE_LABELS[p.role] || p.role)}</span></td>
         <td>${escapeHtml(p.label || "—")}</td>
         <td class="pin-hash">${escapeHtml(p.hash_prefix)}…</td>
         <td><button type="button" class="btn btn-sm btn-ghost pin-delete" data-delete-index="${index}">Удалить</button></td>
@@ -254,7 +266,8 @@ function onUnauthorized() {
 }
 
 async function boot() {
-  if (getRole() === "admin") {
+  const role = getRole();
+  if (role === "admin" || role === "editor") {
     enterApp();
     return;
   }
@@ -271,8 +284,9 @@ setupForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   showError(setupError, "");
   const password = setupPassword.value;
-  if (password.length < 4) {
-    showError(setupError, "Пароль: минимум 4 символа");
+  const policyError = passwordPolicyError(password);
+  if (policyError) {
+    showError(setupError, policyError);
     return;
   }
   if (password !== setupPassword2.value) {
@@ -308,9 +322,9 @@ loginForm.addEventListener("submit", async (event) => {
   }
   try {
     const { token, role } = await api.login(password);
-    if (role !== "admin") {
+    if (role !== "admin" && role !== "editor") {
       clearSession();
-      showError(loginError, "Этот пароль не администраторский");
+      showError(loginError, "Этот пароль не имеет доступа к админ панели");
       return;
     }
     setSession(token, role);
@@ -407,17 +421,22 @@ pinForm.addEventListener("submit", async (event) => {
   showError(pinError, "");
   pinCreated.hidden = true;
   const password = pinValue.value;
-  if (password.length < 4) {
-    showError(pinError, "Пароль: минимум 4 символа");
-    return;
+  // Empty password: the server generates one and returns it in generated_password.
+  if (password) {
+    const policyError = passwordPolicyError(password);
+    if (policyError) {
+      showError(pinError, policyError);
+      return;
+    }
   }
   try {
-    await api.createPin({
+    const result = await api.createPin({
       password,
       role: pinRole.value,
       label: pinLabel.value.trim(),
     });
-    pinCreated.textContent = `Пароль создан: ${password} — передайте его владельцу, он больше не покажется.`;
+    const shown = result.generated_password || password;
+    pinCreated.textContent = `Пароль создан: ${shown} — передайте его владельцу, он больше не покажется.`;
     pinCreated.hidden = false;
     pinValue.value = "";
     pinLabel.value = "";
@@ -451,5 +470,9 @@ logoutBtn.addEventListener("click", async () => {
   clearSession();
   renderSessionUi();
 });
+
+if (changePasswordBtn) {
+  mountChangePassword({ openButton: changePasswordBtn, onUnauthorized });
+}
 
 boot();

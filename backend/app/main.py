@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import db
-from .auth import SessionStore, has_admin, hash_pin
+from .auth import SessionStore, has_admin, hash_pin, password_policy_error
 from .models import PinCode, Role
 from .routes import router
 from .store import migrate_from_json
@@ -52,11 +52,9 @@ def create_app(data_path: Path) -> FastAPI:
             return JSONResponse(status_code=409, content={"detail": "admin already exists"})
         body = await request.json()
         password = str(body.get("password", ""))
-        if len(password.strip()) < 4:
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "password must be at least 4 characters"},
-            )
+        error = password_policy_error(password)
+        if error:
+            return JSONResponse(status_code=400, content={"detail": error})
         pin = PinCode(pin_hash=hash_pin(password), role=Role.ADMIN, label="Admin")
         await asyncio.to_thread(db.add_pin, conn, pin)
         return {"has_admin": True}
